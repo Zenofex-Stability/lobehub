@@ -11,6 +11,8 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
 import { ModelItemRender, ProviderItemRender } from '@/components/ModelSelect';
+import { useUserStore } from '@/store/user';
+import { userGeneralSettingsSelectors } from '@/store/user/selectors';
 
 import { styles } from '../../styles';
 import { type ListItem } from '../../types';
@@ -42,6 +44,7 @@ export const ListItemRenderer = memo<ListItemRendererProps>(
   }) => {
     const { t } = useTranslation('components');
     const navigate = useNavigate();
+    const isDevMode = useUserStore((s) => userGeneralSettingsSelectors.config(s).isDevMode);
 
     switch (item.type) {
       case 'no-provider': {
@@ -124,7 +127,7 @@ export const ListItemRenderer = memo<ListItemRendererProps>(
                 {...item.model.abilities}
                 newBadgeLabel={newLabel}
                 proBadgeLabel={restricted ? proLabel : undefined}
-                showInfoTag={false}
+                showInfoTag={isDevMode}
               />
             </Block>
           </Flexbox>
@@ -158,6 +161,7 @@ export const ListItemRenderer = memo<ListItemRendererProps>(
                 data={item.data}
                 newLabel={newLabel}
                 proBadgeLabel={restricted ? proLabel : undefined}
+                showInfoTag={isDevMode}
               />
             </Block>
           </Flexbox>
@@ -176,6 +180,7 @@ export const ListItemRenderer = memo<ListItemRendererProps>(
               onClose={onClose}
               onModelChange={onModelChange}
               onRestrictedModelClick={onRestrictedModelClick}
+              showInfoTag={isDevMode}
             />
           </Flexbox>
         );
