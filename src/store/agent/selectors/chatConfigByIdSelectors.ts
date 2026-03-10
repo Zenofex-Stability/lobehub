@@ -63,6 +63,11 @@ const isMemoryToolEnabledById = (agentId: string) => (s: AgentStoreState) =>
 const getMemoryToolEffortById = (agentId: string) => (s: AgentStoreState) =>
   getChatConfigById(agentId)(s).memory?.effort ?? 'medium';
 
+const getSkillActivateModeById =
+  (agentId: string) =>
+  (s: AgentStoreState): 'auto' | 'manual' =>
+    getChatConfigById(agentId)(s).skillActivateMode ?? 'auto';
+
 export const chatConfigByIdSelectors = {
   getChatConfigById,
   getEnableHistoryCountById,
@@ -71,6 +76,7 @@ export const chatConfigByIdSelectors = {
   getMemoryToolEffortById,
   getSearchFCModelById,
   getSearchModeById,
+  getSkillActivateModeById,
   getUseModelBuiltinSearchById,
   isEnableSearchById,
   isMemoryToolEnabledById,
