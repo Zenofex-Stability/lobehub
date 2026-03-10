@@ -1,25 +1,22 @@
 import { createStyles } from 'antd-style';
 
+const tagBase = (outlineColor: string, token: any) => `
+  cursor: default;
+  user-select: none;
+  display: inline-flex;
+
+  &.selected {
+    border-radius: ${token.borderRadius}px;
+    outline: 2px solid ${outlineColor};
+  }
+`;
+
 export const useStyles = createStyles(({ css, token }) => ({
-  aiTag: css`
-    cursor: default;
-    user-select: none;
-    display: inline-flex;
-
-    &.selected {
-      border-radius: ${token.borderRadius}px;
-      outline: 2px solid ${token.colorPrimary};
-    }
+  commandTag: css`
+    ${tagBase('#722ED1', token)}
   `,
-  promptTag: css`
-    cursor: default;
-    user-select: none;
-    display: inline-flex;
-
-    &.selected {
-      border-radius: ${token.borderRadius}px;
-      outline: 2px solid ${token.colorSuccess};
-    }
+  skillTag: css`
+    ${tagBase(token.colorPrimary, token)}
   `,
 }));
 

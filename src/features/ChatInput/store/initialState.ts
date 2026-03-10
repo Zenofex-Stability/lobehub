@@ -7,6 +7,7 @@ import { type ActionKeys } from '@/features/ChatInput';
 export type SendButtonHandler = (params: {
   clearContent: () => void;
   editor: IEditor;
+  getEditorData: () => Record<string, any> | undefined;
   getMarkdownContent: () => string;
 }) => Promise<void> | void;
 

@@ -105,9 +105,9 @@ export class ActionTagPlugin {
       try {
         const { INodeHelper } = require('@lobehub/editor/es/editor-kernel/inode/helper');
         return INodeHelper.createElementNode(ActionTagNode.getType(), {
-          actionCategory: (xmlElement.getAttribute('category') || 'prompt') as ActionTagCategory,
+          actionCategory: (xmlElement.getAttribute('category') || 'skill') as ActionTagCategory,
           actionLabel: xmlElement.getAttribute('label') || '',
-          actionType: (xmlElement.getAttribute('type') || 'polish') as ActionTagType,
+          actionType: (xmlElement.getAttribute('type') || 'translate') as ActionTagType,
         } satisfies Partial<SerializedActionTagNode>);
       } catch {
         return false;

@@ -31,17 +31,15 @@ vi.mock('./VideoFileListViewer', () => ({
 }));
 
 describe('User MessageContent', () => {
-  it('should prefer rich text rendering when inputEditorState exists', () => {
+  it('should prefer rich text rendering when editorData exists', () => {
     render(
       <MessageContent
         content={'markdown-content'}
         createdAt={Date.now()}
+        editorData={{ root: { children: [], type: 'root', version: 1 } }}
         id={'msg-1'}
         role={'user'}
         updatedAt={Date.now()}
-        metadata={{
-          inputEditorState: { root: { children: [], type: 'root', version: 1 } },
-        }}
       />,
     );
 
@@ -49,7 +47,7 @@ describe('User MessageContent', () => {
     expect(screen.queryByTestId('markdown-message')).not.toBeInTheDocument();
   });
 
-  it('should render markdown when inputEditorState is missing', () => {
+  it('should render markdown when editorData is missing', () => {
     render(
       <MessageContent
         content={'markdown-content'}

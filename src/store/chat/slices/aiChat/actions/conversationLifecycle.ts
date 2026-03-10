@@ -27,6 +27,7 @@ import { useUserMemoryStore } from '@/store/userMemory';
 
 import { dbMessageSelectors, displayMessageSelectors, topicSelectors } from '../../../selectors';
 import { messageMapKey } from '../../../utils/messageMapKey';
+import { type CommandSendOverrides, processCommands } from './commandBus';
 
 /**
  * Extended params for sendMessage with context
@@ -71,6 +72,7 @@ export class ConversationLifecycleActionImpl {
 
   sendMessage = async ({
     message,
+    editorData,
     files,
     onlyAddUserMessage,
     context,
@@ -95,6 +97,23 @@ export class ConversationLifecycleActionImpl {
         : undefined;
 
     if (!agentId) return;
+
+    // ── Command Bus: extract and process built-in commands from editorData ──
+    const commandOverrides: CommandSendOverrides = processCommands({
+      message,
+      editorData,
+      files,
+      onlyAddUserMessage,
+      context,
+      messages: inputMessages,
+      parentId: inputParentId,
+      pageSelections,
+    });
+
+    // /newTopic — force a fresh topic regardless of current context
+    if (commandOverrides.forceNewTopic) {
+      context = { ...context, topicId: undefined };
+    }
 
     // When creating new thread, override threadId to undefined (server will create it)
     // Check if current agentId is the supervisor agent of the group
@@ -175,6 +194,7 @@ export class ConversationLifecycleActionImpl {
     this.#get().optimisticCreateTmpMessage(
       {
         content: message,
+        editorData: editorData ?? undefined,
         // if message has attached with files, then add files to message and the agent
         files: fileIdList,
         role: 'user',
@@ -222,7 +242,13 @@ export class ConversationLifecycleActionImpl {
       const topicId = operationContext.topicId;
       data = await aiChatService.sendMessageInServer(
         {
-          newUserMessage: { content: message, files: fileIdList, pageSelections, parentId },
+          newUserMessage: {
+            content: message,
+            editorData,
+            files: fileIdList,
+            pageSelections,
+            parentId,
+          },
           // if there is topicId，then add topicId to message
           topicId: topicId ?? undefined,
           threadId: operationContext.threadId ?? undefined,
@@ -370,42 +396,45 @@ export class ConversationLifecycleActionImpl {
     // execAgentRuntime is a separate operation (child) that handles AI response generation
     this.#get().completeOperation(operationId);
 
-    // Create final context for AI execution (with updated topicId/threadId from server)
-    const execContext = {
-      ...operationContext,
-      topicId: data.topicId ?? operationContext.topicId,
-      threadId: data.createdThreadId ?? operationContext.threadId,
-    };
+    // ── Skip AI execution when command requests it (e.g. /compact) ──
+    if (!commandOverrides.skipAISend) {
+      // Create final context for AI execution (with updated topicId/threadId from server)
+      const execContext = {
+        ...operationContext,
+        topicId: data.topicId ?? operationContext.topicId,
+        threadId: data.createdThreadId ?? operationContext.threadId,
+      };
 
-    // Get the current messages to generate AI response
-    const displayMessages = displayMessageSelectors.getDisplayMessagesByKey(
-      messageMapKey(execContext),
-    )(this.#get());
+      // Get the current messages to generate AI response
+      const displayMessages = displayMessageSelectors.getDisplayMessagesByKey(
+        messageMapKey(execContext),
+      )(this.#get());
 
-    try {
-      await internal_execAgentRuntime({
-        context: execContext,
-        messages: displayMessages,
-        parentMessageId: data.assistantMessageId,
-        parentMessageType: 'assistant',
-        parentOperationId: operationId, // Pass as parent operation
-        // If a new thread was created, mark as inPortalThread for consistent behavior
-        inPortalThread: !!data.createdThreadId,
-        skipCreateFirstMessage: true,
-      });
+      try {
+        await internal_execAgentRuntime({
+          context: execContext,
+          messages: displayMessages,
+          parentMessageId: data.assistantMessageId,
+          parentMessageType: 'assistant',
+          parentOperationId: operationId, // Pass as parent operation
+          // If a new thread was created, mark as inPortalThread for consistent behavior
+          inPortalThread: !!data.createdThreadId,
+          skipCreateFirstMessage: true,
+        });
 
-      const userFiles = dbMessageSelectors
-        .dbUserFiles(this.#get())
-        .map((f) => f?.id)
-        .filter(Boolean) as string[];
+        const userFiles = dbMessageSelectors
+          .dbUserFiles(this.#get())
+          .map((f) => f?.id)
+          .filter(Boolean) as string[];
 
-      if (userFiles.length > 0) {
-        await getAgentStoreState().addFilesToAgent(userFiles, false);
+        if (userFiles.length > 0) {
+          await getAgentStoreState().addFilesToAgent(userFiles, false);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (data.topicId) this.#get().internal_updateTopicLoading(data.topicId, false);
       }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      if (data.topicId) this.#get().internal_updateTopicLoading(data.topicId, false);
     }
 
     // Return result for callers who need message IDs

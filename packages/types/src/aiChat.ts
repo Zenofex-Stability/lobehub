@@ -12,6 +12,8 @@ import { ThreadType } from './topic/thread';
 
 export interface SendNewMessage {
   content: string;
+  /** Lexical editor JSON state for rich text rendering */
+  editorData?: Record<string, any>;
   // if message has attached with files, then add files to message and the agent
   files?: string[];
   /** Page selections attached to this message (for Ask AI functionality) */
@@ -88,6 +90,7 @@ export const AiSendMessageServerSchema = z.object({
     .optional(),
   newUserMessage: z.object({
     content: z.string(),
+    editorData: z.record(z.unknown()).optional(),
     files: z.array(z.string()).optional(),
     pageSelections: z.array(PageSelectionSchema).optional(),
     parentId: z.string().optional(),

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { ActionTagNode } from './ActionTagNode';
 import { useStyles } from './style';
+import type { ActionTagCategory } from './types';
 
 interface ActionTagProps {
   editor: LexicalEditor;
@@ -12,13 +13,30 @@ interface ActionTagProps {
   node: ActionTagNode;
 }
 
+const CATEGORY_COLOR: Record<ActionTagCategory, string> = {
+  command: 'purple',
+  skill: 'blue',
+};
+
+const CATEGORY_I18N_KEY: Record<ActionTagCategory, string> = {
+  command: 'actionTag.category.command',
+  skill: 'actionTag.category.skill',
+};
+
+const CATEGORY_STYLE_KEY: Record<ActionTagCategory, 'commandTag' | 'skillTag'> = {
+  command: 'commandTag',
+  skill: 'skillTag',
+};
+
 const ActionTag = memo<ActionTagProps>(({ node, editor, label }) => {
   const spanRef = useRef<HTMLSpanElement>(null);
   const { styles, cx } = useStyles();
   const { t } = useTranslation('editor');
 
-  const isAI = node.actionCategory === 'ai';
-  const categoryLabel = t(isAI ? 'actionTag.category.ai' : 'actionTag.category.prompt');
+  const category = node.actionCategory;
+  const categoryLabel = t(CATEGORY_I18N_KEY[category] as any);
+  const color = CATEGORY_COLOR[category];
+  const styleKey = CATEGORY_STYLE_KEY[category];
 
   const onClick = useCallback((payload: MouseEvent) => {
     if (payload.target === spanRef.current || spanRef.current?.contains(payload.target as Node)) {
@@ -32,7 +50,7 @@ const ActionTag = memo<ActionTagProps>(({ node, editor, label }) => {
   }, [editor, onClick]);
 
   return (
-    <span className={cx('editor_action_tag', isAI ? styles.aiTag : styles.promptTag)} ref={spanRef}>
+    <span className={cx('editor_action_tag', styles[styleKey])} ref={spanRef}>
       <Tooltip
         title={
           <div>
@@ -41,7 +59,7 @@ const ActionTag = memo<ActionTagProps>(({ node, editor, label }) => {
           </div>
         }
       >
-        <Tag color={isAI ? 'blue' : 'green'} variant="filled">
+        <Tag color={color} variant="filled">
           {label}
         </Tag>
       </Tooltip>

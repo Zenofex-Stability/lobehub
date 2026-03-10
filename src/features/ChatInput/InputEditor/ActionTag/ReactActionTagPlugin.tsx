@@ -12,13 +12,14 @@ const ReactActionTagPlugin: FC = () => {
 
   useLayoutEffect(() => {
     (editor as any).registerPlugin(ActionTagPlugin, {
-      decorator: (node: any, lexicalEditor: any) => (
-        <ActionTag
-          editor={lexicalEditor}
-          label={t(`slash.${node.actionType}` as any)}
-          node={node}
-        />
-      ),
+      decorator: (node: any, lexicalEditor: any) => {
+        const label =
+          node.actionCategory === 'command'
+            ? t(`slash.${node.actionType}` as any)
+            : node.actionLabel;
+
+        return <ActionTag editor={lexicalEditor} label={label} node={node} />;
+      },
       theme: actionTagTheme,
     });
   }, [editor, t]);
