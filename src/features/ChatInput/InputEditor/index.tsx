@@ -35,7 +35,7 @@ const className = cx(css`
 `);
 
 const InputEditor = memo<{ defaultRows?: number }>(({ defaultRows = 2 }) => {
-  const [editor, slashMenuRef, send, updateMarkdownContent, expand, mentionItems] =
+  const [editor, slashMenuRef, send, updateMarkdownContent, expand, mentionItems, slashPlacement] =
     useChatInputStore((s) => [
       s.editor,
       s.slashMenuRef,
@@ -43,6 +43,7 @@ const InputEditor = memo<{ defaultRows?: number }>(({ defaultRows = 2 }) => {
       s.updateMarkdownContent,
       s.expand,
       s.mentionItems,
+      s.slashPlacement ?? 'top',
     ]);
 
   const storeApi = useStoreApi();
@@ -88,6 +89,7 @@ const InputEditor = memo<{ defaultRows?: number }>(({ defaultRows = 2 }) => {
     ) => {
       const actionItems =
         typeof slashActionItems === 'function' ? await slashActionItems(search) : slashActionItems;
+
       return actionItems;
     },
     [slashActionItems],
@@ -132,6 +134,7 @@ const InputEditor = memo<{ defaultRows?: number }>(({ defaultRows = 2 }) => {
       className={className}
       content={''}
       editor={editor}
+      slashPlacement={slashPlacement}
       {...richRenderProps}
       placeholder={<Placeholder />}
       type={'text'}
@@ -164,13 +167,6 @@ const InputEditor = memo<{ defaultRows?: number }>(({ defaultRows = 2 }) => {
       }
       slashOption={{
         items: slashItems,
-        renderComp: expand
-          ? undefined
-          : (props) => {
-              return (
-                <SlashMenu {...props} getPopupContainer={() => (slashMenuRef as any)?.current} />
-              );
-            },
       }}
       style={{
         minHeight: defaultRows > 1 ? defaultRows * 23 : undefined,

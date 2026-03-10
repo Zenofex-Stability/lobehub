@@ -199,6 +199,7 @@ const ChatInput = memo<ChatInputProps>(
         rightActions={rightActions}
         sendButtonProps={sendButtonProps}
         sendMenu={sendMenu}
+        slashPlacement="top"
         chatInputEditorRef={(instance) => {
           if (instance) {
             setEditor(instance);
