@@ -1106,7 +1106,7 @@ describe('ToolsEngine', () => {
       },
     ];
 
-    it('should only enable notebook when user selected only notebook', () => {
+    it('should only enable notebook + always-on builtins when user selected only notebook', () => {
       const userSelectedPlugins = ['lobe-notebook'];
       const defaultToolIds = [
         'lobe-tools',
@@ -1117,13 +1117,17 @@ describe('ToolsEngine', () => {
         'lobe-user-memory',
       ];
 
-      // Build rules: user-selected plugins + system conditions
+      // Build rules: user-selected plugins + always-on builtins + system conditions
       const rules: Record<string, boolean> = {
+        // User-selected plugins
+        ...Object.fromEntries(userSelectedPlugins.map((id) => [id, true])),
+        // Always-on builtin tools
+        'lobe-tools': true,
+        'lobe-skills': true,
+        // System-level rules
         'lobe-knowledge-base': false, // no knowledge bases enabled
         'lobe-user-memory': false, // memory disabled
         'lobe-web-browsing': true, // search enabled
-        // User-selected plugins
-        ...Object.fromEntries(userSelectedPlugins.map((id) => [id, true])),
       };
 
       const engine = new ToolsEngine({
@@ -1139,13 +1143,12 @@ describe('ToolsEngine', () => {
         provider: 'openai',
       });
 
-      // Only notebook + web-browsing should be enabled
-      // lobe-tools, lobe-skills, lobe-skill-store should NOT be enabled
-      // because user didn't select them and they have no explicit rule
+      // notebook + web-browsing + always-on builtins (lobe-tools, lobe-skills) should be enabled
       expect(result.enabledToolIds).toContain('lobe-notebook');
       expect(result.enabledToolIds).toContain('lobe-web-browsing');
-      expect(result.enabledToolIds).not.toContain('lobe-tools');
-      expect(result.enabledToolIds).not.toContain('lobe-skills');
+      expect(result.enabledToolIds).toContain('lobe-tools');
+      expect(result.enabledToolIds).toContain('lobe-skills');
+      // lobe-skill-store should NOT be enabled (not always-on, not user-selected)
       expect(result.enabledToolIds).not.toContain('lobe-skill-store');
       expect(result.enabledToolIds).not.toContain('lobe-knowledge-base');
       expect(result.enabledToolIds).not.toContain('lobe-user-memory');
