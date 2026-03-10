@@ -574,20 +574,17 @@ export const aiAgentRouter = router({
         slug,
       });
 
-      // If this is a frontend-initiated call, return messages for UI sync
-      if (result.success) {
-        const { messages, topics } = await ctx.aiChatService.getMessagesAndTopics({
-          agentId: result.agentId,
-          groupId: appContext?.groupId,
-          includeTopic: result.isCreateNewTopic,
-          threadId: result.createdThreadId ?? appContext?.threadId,
-          topicId: result.topicId,
-        });
+      // Return messages for UI sync regardless of success/failure,
+      // since execAgent persists user and assistant messages before starting the operation
+      const { messages, topics } = await ctx.aiChatService.getMessagesAndTopics({
+        agentId: result.agentId,
+        groupId: appContext?.groupId,
+        includeTopic: result.isCreateNewTopic,
+        threadId: result.createdThreadId ?? appContext?.threadId,
+        topicId: result.topicId,
+      });
 
-        return { ...result, messages, topics };
-      }
-
-      return result;
+      return { ...result, messages, topics };
     } catch (error: any) {
       console.error('execAgent failed: %O', error);
 
