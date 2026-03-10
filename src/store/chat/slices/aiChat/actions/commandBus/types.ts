@@ -11,6 +11,8 @@ export interface CommandSendOverrides {
   forceNewTopic?: boolean;
   /** Whether to skip sending the message to AI entirely */
   skipAISend?: boolean;
+  /** Trigger context compression after message creation */
+  triggerCompression?: boolean;
 }
 
 export interface CommandHandlerContext {

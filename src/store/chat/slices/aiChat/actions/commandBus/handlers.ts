@@ -10,8 +10,8 @@ export const newTopicHandler: CommandHandler = () => {
 
 /**
  * /compact — Compress the current conversation context.
- * Triggers a history summarization without sending a new AI message.
+ * Triggers a history summarization instead of normal AI response.
  */
 export const compactHandler: CommandHandler = () => {
-  return { skipAISend: true };
+  return { skipAISend: true, triggerCompression: true };
 };

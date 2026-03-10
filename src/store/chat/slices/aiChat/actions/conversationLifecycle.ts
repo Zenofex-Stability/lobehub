@@ -1,6 +1,7 @@
 // Disable the auto sort key eslint rule to make the code more logic and readable
 import { ENABLE_BUSINESS_FEATURES } from '@lobechat/business-const';
 import { LOADING_FLAT } from '@lobechat/const';
+import { chainCompressContext } from '@lobechat/prompts';
 import {
   type ChatImageItem,
   type ChatThreadType,
@@ -15,6 +16,8 @@ import { t } from 'i18next';
 
 import { markUserValidAction } from '@/business/client/markUserValidAction';
 import { aiChatService } from '@/services/aiChat';
+import { chatService } from '@/services/chat';
+import { messageService } from '@/services/message';
 import { getAgentStoreState } from '@/store/agent';
 import { agentSelectors } from '@/store/agent/selectors';
 import { agentGroupByIdSelectors, getChatGroupStoreState } from '@/store/agentGroup';
@@ -396,16 +399,23 @@ export class ConversationLifecycleActionImpl {
     // execAgentRuntime is a separate operation (child) that handles AI response generation
     this.#get().completeOperation(operationId);
 
-    // ── Skip AI execution when command requests it (e.g. /compact) ──
-    if (!commandOverrides.skipAISend) {
-      // Create final context for AI execution (with updated topicId/threadId from server)
+    // ── Command-driven execution ──
+    if (commandOverrides.triggerCompression) {
+      // /compact: trigger context compression instead of AI response
+      const compressContext = {
+        ...operationContext,
+        topicId: data.topicId ?? operationContext.topicId,
+        threadId: data.createdThreadId ?? operationContext.threadId,
+      };
+      await this.#executeCompression(compressContext, operationId);
+    } else if (!commandOverrides.skipAISend) {
+      // Normal AI execution
       const execContext = {
         ...operationContext,
         topicId: data.topicId ?? operationContext.topicId,
         threadId: data.createdThreadId ?? operationContext.threadId,
       };
 
-      // Get the current messages to generate AI response
       const displayMessages = displayMessageSelectors.getDisplayMessagesByKey(
         messageMapKey(execContext),
       )(this.#get());
@@ -416,8 +426,7 @@ export class ConversationLifecycleActionImpl {
           messages: displayMessages,
           parentMessageId: data.assistantMessageId,
           parentMessageType: 'assistant',
-          parentOperationId: operationId, // Pass as parent operation
-          // If a new thread was created, mark as inPortalThread for consistent behavior
+          parentOperationId: operationId,
           inPortalThread: !!data.createdThreadId,
           skipCreateFirstMessage: true,
         });
@@ -483,6 +492,81 @@ export class ConversationLifecycleActionImpl {
         message: error instanceof Error ? error.message : String(error),
       });
       throw error;
+    }
+  };
+
+  /**
+   * Execute context compression for /compact command.
+   * Reuses the same service methods as the agent runtime's compress_context executor.
+   */
+  #executeCompression = async (
+    context: Record<string, any>,
+    parentOperationId: string,
+  ): Promise<void> => {
+    const { agentId, topicId } = context;
+    if (!topicId) return;
+
+    const contextKey = messageMapKey(context as any);
+    const dbMessages =
+      displayMessageSelectors.getDisplayMessagesByKey(contextKey)(this.#get()) || [];
+    const messageIds = dbMessages.map((m) => m.id).filter(Boolean);
+
+    if (messageIds.length === 0) return;
+
+    const { operationId } = this.#get().startOperation({
+      context: { ...context, messageId: undefined },
+      parentOperationId,
+      type: 'contextCompression',
+    });
+
+    try {
+      // 1. Create compression group
+      const result = await messageService.createCompressionGroup({
+        agentId,
+        messageIds,
+        topicId,
+      });
+      const { messageGroupId, messages: initialMessages, messagesToSummarize } = result;
+
+      this.#get().replaceMessages(initialMessages, { context: context as any });
+
+      // 2. Generate summary via LLM
+      const { model, provider } = agentSelectors.getAgentConfigById(agentId)(getAgentStoreState());
+      const compressionPayload = chainCompressContext(messagesToSummarize);
+      let summaryContent = '';
+
+      await chatService.fetchPresetTaskResult({
+        onMessageHandle: (chunk) => {
+          if (chunk.type === 'text') {
+            summaryContent += chunk.text || '';
+            this.#get().internal_dispatchMessage(
+              { id: messageGroupId, type: 'updateMessage', value: { content: summaryContent } },
+              { operationId },
+            );
+          }
+        },
+        params: { ...compressionPayload, model, provider },
+      });
+
+      // 3. Finalize compression
+      const finalResult = await messageService.finalizeCompression({
+        agentId,
+        content: summaryContent,
+        messageGroupId,
+        topicId,
+      });
+
+      if (finalResult.messages) {
+        this.#get().replaceMessages(finalResult.messages, { context: context as any });
+      }
+
+      this.#get().completeOperation(operationId);
+    } catch (error) {
+      console.error('[/compact] Compression failed:', error);
+      this.#get().failOperation(operationId, {
+        message: error instanceof Error ? error.message : String(error),
+        type: 'compression_failed',
+      });
     }
   };
 }
