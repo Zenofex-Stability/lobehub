@@ -1,5 +1,10 @@
 import {
   Block,
+  DropdownMenuGroup,
+  DropdownMenuGroupLabel,
+  DropdownMenuItem,
+  DropdownMenuItemIcon,
+  DropdownMenuItemLabel,
   DropdownMenuPopup,
   DropdownMenuPortal,
   DropdownMenuPositioner,
@@ -10,7 +15,7 @@ import {
   menuSharedStyles,
 } from '@lobehub/ui';
 import { cssVar, cx } from 'antd-style';
-import { LucideArrowRight } from 'lucide-react';
+import { Check, LucideArrowRight } from 'lucide-react';
 import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -112,6 +117,38 @@ export const ListItemRenderer = memo<ListItemRendererProps>(
         const isActive = key === activeKey;
         const restricted = isModelRestricted?.(item.model.id, item.provider.id);
 
+        if (isDevMode) {
+          return (
+            <Flexbox style={{ marginBlock: 1, marginInline: 4 }}>
+              <DropdownMenuSubmenuRoot open={detailOpen} onOpenChange={setDetailOpen}>
+                <DropdownMenuSubmenuTrigger
+                  className={cx(menuSharedStyles.item, isActive && styles.menuItemActive)}
+                  style={{ paddingBlock: 8, paddingInline: 8 }}
+                  onClick={async () => {
+                    setDetailOpen(false);
+                    onModelChange(item.model.id, item.provider.id);
+                    onClose();
+                  }}
+                >
+                  <ModelItemRender
+                    {...item.model}
+                    {...item.model.abilities}
+                    newBadgeLabel={newLabel}
+                    showInfoTag
+                  />
+                </DropdownMenuSubmenuTrigger>
+                <DropdownMenuPortal>
+                  <DropdownMenuPositioner anchor={null} placement="right" sideOffset={12}>
+                    <DropdownMenuPopup className={styles.detailPopup}>
+                      <ModelDetailPanel model={item.model.id} provider={item.provider.id} />
+                    </DropdownMenuPopup>
+                  </DropdownMenuPositioner>
+                </DropdownMenuPortal>
+              </DropdownMenuSubmenuRoot>
+            </Flexbox>
+          );
+        }
+
         return (
           <Flexbox style={{ marginBlock: 1, marginInline: 4 }}>
             <Block
@@ -134,7 +171,6 @@ export const ListItemRenderer = memo<ListItemRendererProps>(
                 {...item.model.abilities}
                 newBadgeLabel={newLabel}
                 proBadgeLabel={restricted ? proLabel : undefined}
-                showInfoTag={isDevMode}
               />
             </Block>
           </Flexbox>
