@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, ne, or, sql } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 
 import {
   agents,
@@ -306,15 +306,25 @@ export class SearchRepo {
   }
 
   /**
-   * Calculate relevance score: 1=exact, 2=prefix, 3=contains
+   * Escape special tantivy query syntax characters in user input
    */
-  private calculateRelevance(value: string | null | undefined, query: string): number {
-    if (!value) return 3;
-    const lower = value.toLowerCase();
-    const queryLower = query.toLowerCase();
-    if (lower === queryLower) return 1;
-    if (lower.startsWith(queryLower)) return 2;
-    return 3;
+  private sanitizeQuery(query: string): string {
+    return query.replace(/[+\-&|!(){}[\]^"~*?:\\/]/g, '\\$&').trim();
+  }
+
+  /**
+   * Map BM25 scores to relevance values compatible with the existing sort system.
+   * BM25 score (higher=better) → relevance (1-3, lower=better)
+   */
+  private mapScoresToRelevance<T extends { score: number }>(
+    rows: T[],
+  ): (Omit<T, 'score'> & { relevance: number })[] {
+    if (rows.length === 0) return [];
+    const maxScore = Math.max(...rows.map((r) => r.score));
+    return rows.map(({ score, ...rest }) => ({
+      ...rest,
+      relevance: maxScore > 0 ? 1 + 2 * (1 - score / maxScore) : 3,
+    }));
   }
 
   /**
@@ -327,38 +337,36 @@ export class SearchRepo {
   }
 
   /**
-   * Search agents by title, description, slug, tags
+   * Search agents by title, description, slug, tags (BM25)
    */
   private async searchAgents(query: string, limit: number): Promise<AgentSearchResult[]> {
-    const searchTerm = `%${query}%`;
+    const bm25Query = this.sanitizeQuery(query);
 
     const rows = await this.db
-      .select()
+      .select({
+        avatar: agents.avatar,
+        backgroundColor: agents.backgroundColor,
+        createdAt: agents.createdAt,
+        description: agents.description,
+        id: agents.id,
+        score: sql<number>`paradedb.score(${agents.id})`,
+        slug: agents.slug,
+        tags: agents.tags,
+        title: agents.title,
+        updatedAt: agents.updatedAt,
+      })
       .from(agents)
-      .where(
-        and(
-          eq(agents.userId, this.userId),
-          or(
-            ilike(agents.title, searchTerm),
-            ilike(sql`COALESCE(${agents.description}, '')`, searchTerm),
-            ilike(sql`COALESCE(${agents.slug}, '')`, searchTerm),
-            sql`${agents.tags} IS NOT NULL AND EXISTS (
-              SELECT 1 FROM jsonb_array_elements_text(${agents.tags}) AS tag
-              WHERE tag ILIKE ${searchTerm}
-            )`,
-          ),
-        ),
-      )
-      .orderBy(desc(agents.updatedAt))
+      .where(and(eq(agents.userId, this.userId), sql`${agents.title} @@@ ${bm25Query}`))
+      .orderBy(sql`paradedb.score(${agents.id}) DESC`)
       .limit(limit);
 
-    return rows.map((row) => ({
+    return this.mapScoresToRelevance(rows).map((row) => ({
       avatar: row.avatar,
       backgroundColor: row.backgroundColor,
       createdAt: row.createdAt,
       description: row.description,
       id: row.id,
-      relevance: this.calculateRelevance(row.title, query),
+      relevance: row.relevance,
       slug: row.slug,
       tags: (row.tags as string[]) || [],
       title: row.title || '',
@@ -368,37 +376,36 @@ export class SearchRepo {
   }
 
   /**
-   * Search topics by title, content, historySummary
+   * Search topics by title, content, historySummary (BM25)
    */
   private async searchTopics(
     query: string,
     limit: number,
     agentId?: string,
   ): Promise<TopicSearchResult[]> {
-    const searchTerm = `%${query}%`;
+    const bm25Query = this.sanitizeQuery(query);
 
     const rows = await this.db
-      .select()
+      .select({
+        agentId: topics.agentId,
+        content: topics.content,
+        createdAt: topics.createdAt,
+        favorite: topics.favorite,
+        id: topics.id,
+        score: sql<number>`paradedb.score(${topics.id})`,
+        sessionId: topics.sessionId,
+        title: topics.title,
+        updatedAt: topics.updatedAt,
+      })
       .from(topics)
-      .where(
-        and(
-          eq(topics.userId, this.userId),
-          or(
-            ilike(sql`COALESCE(${topics.title}, '')`, searchTerm),
-            ilike(sql`COALESCE(${topics.content}, '')`, searchTerm),
-            ilike(sql`COALESCE(${topics.historySummary}, '')`, searchTerm),
-          ),
-        ),
-      )
-      .orderBy(desc(topics.updatedAt))
+      .where(and(eq(topics.userId, this.userId), sql`${topics.title} @@@ ${bm25Query}`))
+      .orderBy(sql`paradedb.score(${topics.id}) DESC`)
       .limit(limit);
 
-    return rows.map((row) => {
-      // Agent context boosting: current agent's topics get higher priority
-      let relevance = this.calculateRelevance(row.title, query);
+    return this.mapScoresToRelevance(rows).map((row) => {
+      let { relevance } = row;
       if (agentId && row.agentId === agentId) {
-        // Boost current agent's topics (0.5-0.7 range)
-        relevance = relevance === 1 ? 0.5 : relevance === 2 ? 0.6 : 0.7;
+        relevance = relevance * 0.5;
       }
 
       return {
@@ -417,22 +424,14 @@ export class SearchRepo {
   }
 
   /**
-   * Search messages by content
+   * Search messages by content (BM25)
    */
   private async searchMessages(
     query: string,
     limit: number,
     agentId?: string,
   ): Promise<MessageSearchResult[]> {
-    const searchTerm = `%${query}%`;
-
-    // Split query into words for multi-word search
-    const words = query.split(/\s+/).filter((w) => w.length > 0);
-
-    const wordConditions =
-      words.length > 1
-        ? or(...words.map((word) => ilike(sql`COALESCE(${messages.content}, '')`, `%${word}%`)))
-        : ilike(sql`COALESCE(${messages.content}, '')`, searchTerm);
+    const bm25Query = this.sanitizeQuery(query);
 
     const rows = await this.db
       .select({
@@ -443,20 +442,26 @@ export class SearchRepo {
         id: messages.id,
         model: messages.model,
         role: messages.role,
+        score: sql<number>`paradedb.score(${messages.id})`,
         topicId: messages.topicId,
         updatedAt: messages.updatedAt,
       })
       .from(messages)
       .leftJoin(agents, eq(messages.agentId, agents.id))
-      .where(and(eq(messages.userId, this.userId), ne(messages.role, 'tool'), wordConditions))
-      .orderBy(desc(messages.createdAt))
+      .where(
+        and(
+          eq(messages.userId, this.userId),
+          ne(messages.role, 'tool'),
+          sql`${messages.content} @@@ ${bm25Query}`,
+        ),
+      )
+      .orderBy(sql`paradedb.score(${messages.id}) DESC`)
       .limit(limit);
 
-    return rows.map((row) => {
-      // Agent context boosting
-      let relevance = this.calculateRelevance(row.content, query);
+    return this.mapScoresToRelevance(rows).map((row) => {
+      let { relevance } = row;
       if (agentId && row.agentId === agentId) {
-        relevance = relevance === 1 ? 0.5 : relevance === 2 ? 0.6 : 0.7;
+        relevance = relevance * 0.5;
       }
 
       return {
@@ -477,10 +482,10 @@ export class SearchRepo {
   }
 
   /**
-   * Search files by name
+   * Search files by name (BM25)
    */
   private async searchFiles(query: string, limit: number): Promise<FileSearchResult[]> {
-    const searchTerm = `%${query}%`;
+    const bm25Query = this.sanitizeQuery(query);
 
     const rows = await this.db
       .select({
@@ -490,6 +495,7 @@ export class SearchRepo {
         id: files.id,
         knowledgeBaseId: knowledgeBaseFiles.knowledgeBaseId,
         name: files.name,
+        score: sql<number>`paradedb.score(${files.id})`,
         size: files.size,
         updatedAt: files.updatedAt,
         url: files.url,
@@ -501,20 +507,20 @@ export class SearchRepo {
         and(
           eq(files.userId, this.userId),
           ne(files.fileType, 'custom/document'),
-          ilike(files.name, searchTerm),
+          sql`${files.name} @@@ ${bm25Query}`,
         ),
       )
-      .orderBy(desc(files.updatedAt))
+      .orderBy(sql`paradedb.score(${files.id}) DESC`)
       .limit(limit);
 
-    return rows.map((row) => ({
+    return this.mapScoresToRelevance(rows).map((row) => ({
       createdAt: row.createdAt,
       description: this.truncate(row.content),
       fileType: row.fileType,
       id: row.id,
       knowledgeBaseId: row.knowledgeBaseId,
       name: row.name,
-      relevance: this.calculateRelevance(row.name, query),
+      relevance: row.relevance,
       size: row.size,
       title: row.name,
       type: 'file' as const,
@@ -524,36 +530,42 @@ export class SearchRepo {
   }
 
   /**
-   * Search folders (documents with file_type='custom/folder')
+   * Search folders (documents with file_type='custom/folder') (BM25)
    */
   private async searchFolders(query: string, limit: number): Promise<FolderSearchResult[]> {
-    const searchTerm = `%${query}%`;
+    const bm25Query = this.sanitizeQuery(query);
 
     const rows = await this.db
-      .select()
+      .select({
+        createdAt: documents.createdAt,
+        description: documents.description,
+        filename: documents.filename,
+        id: documents.id,
+        knowledgeBaseId: documents.knowledgeBaseId,
+        score: sql<number>`paradedb.score(${documents.id})`,
+        slug: documents.slug,
+        title: documents.title,
+        updatedAt: documents.updatedAt,
+      })
       .from(documents)
       .where(
         and(
           eq(documents.userId, this.userId),
           eq(documents.fileType, 'custom/folder'),
-          or(
-            ilike(sql`COALESCE(${documents.title}, '')`, searchTerm),
-            ilike(sql`COALESCE(${documents.filename}, '')`, searchTerm),
-            ilike(sql`COALESCE(${documents.description}, '')`, searchTerm),
-          ),
+          sql`${documents.title} @@@ ${bm25Query}`,
         ),
       )
-      .orderBy(desc(documents.updatedAt))
+      .orderBy(sql`paradedb.score(${documents.id}) DESC`)
       .limit(limit);
 
-    return rows.map((row) => {
+    return this.mapScoresToRelevance(rows).map((row) => {
       const title = row.title || row.filename || 'Untitled';
       return {
         createdAt: row.createdAt,
         description: row.description,
         id: row.id,
         knowledgeBaseId: row.knowledgeBaseId,
-        relevance: this.calculateRelevance(title, query),
+        relevance: row.relevance,
         slug: row.slug,
         title,
         type: 'folder' as const,
@@ -563,34 +575,38 @@ export class SearchRepo {
   }
 
   /**
-   * Search pages (documents with file_type='custom/document')
+   * Search pages (documents with file_type='custom/document') (BM25)
    */
   private async searchPages(query: string, limit: number): Promise<PageSearchResult[]> {
-    const searchTerm = `%${query}%`;
+    const bm25Query = this.sanitizeQuery(query);
 
     const rows = await this.db
-      .select()
+      .select({
+        createdAt: documents.createdAt,
+        filename: documents.filename,
+        id: documents.id,
+        score: sql<number>`paradedb.score(${documents.id})`,
+        title: documents.title,
+        updatedAt: documents.updatedAt,
+      })
       .from(documents)
       .where(
         and(
           eq(documents.userId, this.userId),
           eq(documents.fileType, 'custom/document'),
-          or(
-            ilike(sql`COALESCE(${documents.title}, '')`, searchTerm),
-            ilike(sql`COALESCE(${documents.filename}, '')`, searchTerm),
-          ),
+          sql`${documents.title} @@@ ${bm25Query}`,
         ),
       )
-      .orderBy(desc(documents.updatedAt))
+      .orderBy(sql`paradedb.score(${documents.id}) DESC`)
       .limit(limit);
 
-    return rows.map((row) => {
+    return this.mapScoresToRelevance(rows).map((row) => {
       const title = row.title || row.filename || 'Untitled';
       return {
         createdAt: row.createdAt,
         description: null,
         id: row.id,
-        relevance: this.calculateRelevance(title, query),
+        relevance: row.relevance,
         title,
         type: 'page' as const,
         updatedAt: row.updatedAt,
@@ -599,33 +615,34 @@ export class SearchRepo {
   }
 
   /**
-   * Search memories by title, summary, details
+   * Search memories by title, summary, details (BM25)
    */
   private async searchMemories(query: string, limit: number): Promise<MemorySearchResult[]> {
-    const searchTerm = `%${query}%`;
+    const bm25Query = this.sanitizeQuery(query);
 
     const rows = await this.db
-      .select()
+      .select({
+        createdAt: userMemories.createdAt,
+        id: userMemories.id,
+        memoryLayer: userMemories.memoryLayer,
+        score: sql<number>`paradedb.score(${userMemories.id})`,
+        summary: userMemories.summary,
+        title: userMemories.title,
+        updatedAt: userMemories.updatedAt,
+      })
       .from(userMemories)
       .where(
-        and(
-          eq(userMemories.userId, this.userId),
-          or(
-            ilike(sql`COALESCE(${userMemories.title}, '')`, searchTerm),
-            ilike(sql`COALESCE(${userMemories.summary}, '')`, searchTerm),
-            ilike(sql`COALESCE(${userMemories.details}, '')`, searchTerm),
-          ),
-        ),
+        and(eq(userMemories.userId, this.userId), sql`${userMemories.title} @@@ ${bm25Query}`),
       )
-      .orderBy(desc(userMemories.updatedAt))
+      .orderBy(sql`paradedb.score(${userMemories.id}) DESC`)
       .limit(limit);
 
-    return rows.map((row) => ({
+    return this.mapScoresToRelevance(rows).map((row) => ({
       createdAt: row.createdAt,
       description: this.truncate(row.summary),
       id: row.id,
       memoryLayer: row.memoryLayer,
-      relevance: this.calculateRelevance(row.title, query),
+      relevance: row.relevance,
       title: row.title || 'Untitled Memory',
       type: 'memory' as const,
       updatedAt: row.updatedAt,
@@ -633,35 +650,37 @@ export class SearchRepo {
   }
 
   /**
-   * Search knowledge bases by name and description
+   * Search knowledge bases by name and description (BM25)
    */
   private async searchKnowledgeBases(
     query: string,
     limit: number,
   ): Promise<KnowledgeBaseSearchResult[]> {
-    const searchTerm = `%${query}%`;
+    const bm25Query = this.sanitizeQuery(query);
 
     const rows = await this.db
-      .select()
+      .select({
+        avatar: knowledgeBases.avatar,
+        createdAt: knowledgeBases.createdAt,
+        description: knowledgeBases.description,
+        id: knowledgeBases.id,
+        name: knowledgeBases.name,
+        score: sql<number>`paradedb.score(${knowledgeBases.id})`,
+        updatedAt: knowledgeBases.updatedAt,
+      })
       .from(knowledgeBases)
       .where(
-        and(
-          eq(knowledgeBases.userId, this.userId),
-          or(
-            ilike(knowledgeBases.name, searchTerm),
-            ilike(sql`COALESCE(${knowledgeBases.description}, '')`, searchTerm),
-          ),
-        ),
+        and(eq(knowledgeBases.userId, this.userId), sql`${knowledgeBases.name} @@@ ${bm25Query}`),
       )
-      .orderBy(desc(knowledgeBases.updatedAt))
+      .orderBy(sql`paradedb.score(${knowledgeBases.id}) DESC`)
       .limit(limit);
 
-    return rows.map((row) => ({
+    return this.mapScoresToRelevance(rows).map((row) => ({
       avatar: row.avatar,
       createdAt: row.createdAt,
       description: row.description,
       id: row.id,
-      relevance: this.calculateRelevance(row.name, query),
+      relevance: row.relevance,
       title: row.name,
       type: 'knowledgeBase' as const,
       updatedAt: row.updatedAt,
