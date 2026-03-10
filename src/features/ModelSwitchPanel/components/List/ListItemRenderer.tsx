@@ -1,12 +1,17 @@
 import {
   Block,
+  DropdownMenuPopup,
+  DropdownMenuPortal,
+  DropdownMenuPositioner,
+  DropdownMenuSubmenuRoot,
+  DropdownMenuSubmenuTrigger,
   Flexbox,
   Icon,
   menuSharedStyles,
 } from '@lobehub/ui';
 import { cssVar, cx } from 'antd-style';
 import { LucideArrowRight } from 'lucide-react';
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
@@ -17,6 +22,7 @@ import { userGeneralSettingsSelectors } from '@/store/user/selectors';
 import { styles } from '../../styles';
 import { type ListItem } from '../../types';
 import { menuKey } from '../../utils';
+import ModelDetailPanel from '../ModelDetailPanel';
 import { MultipleProvidersModelItem } from './MultipleProvidersModelItem';
 import { SingleProviderModelItem } from './SingleProviderModelItem';
 
@@ -45,6 +51,7 @@ export const ListItemRenderer = memo<ListItemRendererProps>(
     const { t } = useTranslation('components');
     const navigate = useNavigate();
     const isDevMode = useUserStore((s) => userGeneralSettingsSelectors.config(s).isDevMode);
+    const [detailOpen, setDetailOpen] = useState(false);
 
     switch (item.type) {
       case 'no-provider': {
