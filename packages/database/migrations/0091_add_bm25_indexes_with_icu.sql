@@ -1,6 +1,7 @@
 -- Custom SQL migration file, put your code below! --
 
 -- agents: title, description, slug, tags(jsonb)
+DROP INDEX IF EXISTS agents_bm25_idx;
 CREATE INDEX agents_bm25_idx ON agents
 USING bm25 (id, title, description, slug, tags)
 WITH (
@@ -10,6 +11,7 @@ WITH (
 );
 
 -- topics: title, content, history_summary
+DROP INDEX IF EXISTS topics_bm25_idx;
 CREATE INDEX topics_bm25_idx ON topics
 USING bm25 (id, title, content, history_summary)
 WITH (
@@ -18,6 +20,7 @@ WITH (
 );
 
 -- messages: content
+DROP INDEX IF EXISTS messages_bm25_idx;
 CREATE INDEX messages_bm25_idx ON messages
 USING bm25 (id, content)
 WITH (
@@ -26,6 +29,7 @@ WITH (
 );
 
 -- files: name
+DROP INDEX IF EXISTS files_bm25_idx;
 CREATE INDEX files_bm25_idx ON files
 USING bm25 (id, name)
 WITH (
@@ -34,6 +38,7 @@ WITH (
 );
 
 -- documents: title, filename, description
+DROP INDEX IF EXISTS documents_bm25_idx;
 CREATE INDEX documents_bm25_idx ON documents
 USING bm25 (id, title, filename, description)
 WITH (
@@ -42,6 +47,7 @@ WITH (
 );
 
 -- knowledge_bases: name, description
+DROP INDEX IF EXISTS knowledge_bases_bm25_idx;
 CREATE INDEX knowledge_bases_bm25_idx ON knowledge_bases
 USING bm25 (id, name, description)
 WITH (
@@ -50,6 +56,7 @@ WITH (
 );
 
 -- user_memories: title, summary, details
+DROP INDEX IF EXISTS user_memories_bm25_idx;
 CREATE INDEX user_memories_bm25_idx ON user_memories
 USING bm25 (id, title, summary, details)
 WITH (
@@ -58,6 +65,7 @@ WITH (
 );
 
 -- chat_groups: title, description
+DROP INDEX IF EXISTS chat_groups_bm25_idx;
 CREATE INDEX chat_groups_bm25_idx ON chat_groups
 USING bm25 (id, title, description)
 WITH (
