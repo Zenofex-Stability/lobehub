@@ -14,6 +14,7 @@ import { RemoteDeviceManifest } from '@lobechat/builtin-tool-remote-device';
 import { SkillStoreManifest } from '@lobechat/builtin-tool-skill-store';
 import { SkillsManifest } from '@lobechat/builtin-tool-skills';
 import { LobeToolsManifest } from '@lobechat/builtin-tool-tools';
+import { TopicReferenceManifest } from '@lobechat/builtin-tool-topic-reference';
 import { WebBrowsingManifest } from '@lobechat/builtin-tool-web-browsing';
 import { isDesktop } from '@lobechat/const';
 import { type LobeBuiltinTool } from '@lobechat/types';
@@ -29,6 +30,7 @@ export const defaultToolIds = [
   WebBrowsingManifest.identifier,
   KnowledgeBaseManifest.identifier,
   MemoryManifest.identifier,
+  TopicReferenceManifest.identifier,
 ];
 
 export const builtinTools: LobeBuiltinTool[] = [
@@ -136,6 +138,13 @@ export const builtinTools: LobeBuiltinTool[] = [
     hidden: true,
     identifier: RemoteDeviceManifest.identifier,
     manifest: RemoteDeviceManifest,
+    type: 'builtin',
+  },
+  {
+    discoverable: false,
+    hidden: true,
+    identifier: TopicReferenceManifest.identifier,
+    manifest: TopicReferenceManifest,
     type: 'builtin',
   },
 ];
