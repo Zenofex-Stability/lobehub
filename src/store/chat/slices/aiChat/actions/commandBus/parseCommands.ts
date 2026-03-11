@@ -1,4 +1,4 @@
-import type { RuntimeSelectedSkill } from '@lobechat/types';
+import type { RuntimeSelectedSkill, RuntimeSelectedTool } from '@lobechat/types';
 
 import type {
   ActionTagCategory,
@@ -49,6 +49,30 @@ export const parseSelectedSkillsFromEditorData = (
     acc.push({
       identifier,
       name: skill.label || identifier,
+    });
+
+    return acc;
+  }, []);
+};
+
+export const parseSelectedToolsFromEditorData = (
+  editorData: Record<string, any> | undefined,
+): RuntimeSelectedTool[] => {
+  const actionTags = parseActionTagsFromEditorData(editorData);
+  const selectedTools = actionTags.filter((tag) => tag.category === 'tool');
+
+  if (selectedTools.length === 0) return [];
+
+  const seen = new Set<string>();
+
+  return selectedTools.reduce<RuntimeSelectedTool[]>((acc, tool) => {
+    const identifier = String(tool.type);
+    if (!identifier || seen.has(identifier)) return acc;
+
+    seen.add(identifier);
+    acc.push({
+      identifier,
+      name: tool.label || identifier,
     });
 
     return acc;

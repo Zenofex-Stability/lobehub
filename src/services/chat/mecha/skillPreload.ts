@@ -24,17 +24,18 @@ const getActionAttr = (attrs: string, name: string): string | undefined => {
   return match?.[1];
 };
 
-const isSkillActionTag = (attrs: string) => getActionAttr(attrs, 'category') === 'skill';
-
 const cleanupWhitespace = (text: string) =>
-  text.replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  text
+    .replaceAll(/[ \t]{2,}/g, ' ')
+    .replaceAll(/\n{3,}/g, '\n\n')
+    .trim();
 
 const extractSelectedSkillsFromText = (text: string): RuntimeSelectedSkill[] => {
   const parsedSkills: RuntimeSelectedSkill[] = [];
 
   for (const match of text.matchAll(ACTION_TAG_REGEX)) {
     const attrs = match[1] || '';
-    if (!isSkillActionTag(attrs)) continue;
+    if (getActionAttr(attrs, 'category') !== 'skill') continue;
 
     const identifier = getActionAttr(attrs, 'type');
 
@@ -49,35 +50,8 @@ const extractSelectedSkillsFromText = (text: string): RuntimeSelectedSkill[] => 
   return parsedSkills;
 };
 
-export const stripSkillActionTagsFromText = (text: string) =>
-  cleanupWhitespace(
-    text.replace(ACTION_TAG_REGEX, (full, attrs: string) => (isSkillActionTag(attrs) ? '' : full)),
-  );
-
-const stripSkillActionTagsFromNode = (node: any): any | undefined => {
-  if (!node) return node;
-
-  if (node.type === 'action-tag' && node.actionCategory === 'skill') return undefined;
-
-  if (!Array.isArray(node.children)) return node;
-
-  const children = node.children
-    .map((child: any) => stripSkillActionTagsFromNode(child))
-    .filter((child: any) => child !== undefined);
-
-  return { ...node, children };
-};
-
-export const stripSkillActionTagsFromEditorData = (
-  editorData?: Record<string, any>,
-): Record<string, any> | undefined => {
-  if (!editorData?.root) return editorData;
-
-  const root = stripSkillActionTagsFromNode(editorData.root);
-  if (!root) return undefined;
-
-  return { ...editorData, root };
-};
+export const stripActionTagsFromText = (text: string) =>
+  cleanupWhitespace(text.replaceAll(ACTION_TAG_REGEX, ''));
 
 const resolveSelectedSkills = (
   message: string,
@@ -179,7 +153,9 @@ export const prepareSelectedSkillPreload = async ({
   }
 
   const resolvedSkills = (
-    await Promise.all(resolvedSelectedSkills.map((selectedSkill) => loadSkillContent(selectedSkill)))
+    await Promise.all(
+      resolvedSelectedSkills.map((selectedSkill) => loadSkillContent(selectedSkill)),
+    )
   ).filter((skill): skill is PreloadedSkill => !!skill);
 
   return buildPersistedPreloadMessages(resolvedSkills);

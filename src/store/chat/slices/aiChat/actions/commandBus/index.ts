@@ -10,6 +10,7 @@ export {
   hasNonActionContent,
   parseCommandsFromEditorData,
   parseSelectedSkillsFromEditorData,
+  parseSelectedToolsFromEditorData,
 } from './parseCommands';
 export type { CommandSendOverrides } from './types';
 

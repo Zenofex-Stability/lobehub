@@ -1,6 +1,10 @@
 {
   "actionTag.category.command": "指令",
   "actionTag.category.skill": "技能",
+  "actionTag.category.tool": "工具",
+  "actionTag.tooltip.command": "发送前会先在客户端执行这条 slash 指令。",
+  "actionTag.tooltip.skill": "表示这是一条可为本次请求加载的技能包。",
+  "actionTag.tooltip.tool": "表示这是用户为本次请求显式选中的工具。",
   "actions.expand.off": "收起",
   "actions.expand.on": "展开",
   "actions.typobar.off": "隐藏格式工具栏",

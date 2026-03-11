@@ -1,21 +1,10 @@
+import { escapeXml } from '@lobechat/prompts';
 import debug from 'debug';
 
 import { BaseProvider } from '../base/BaseProvider';
 import type { PipelineContext, ProcessorOptions } from '../types';
 
 const log = debug('context-engine:provider:AgentManagementContextInjector');
-
-/**
- * Escape XML special characters
- */
-const escapeXml = (str: string): string => {
-  return str
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
-};
 
 /**
  * Available model info for Agent Management context

@@ -1,26 +1,33 @@
 import {
+  type getKernelFromEditor,
   ILitexmlService,
   IMarkdownShortCutService,
-  MARKDOWN_READER_LEVEL_HIGH,
 } from '@lobehub/editor';
+import type { IEditorPlugin } from '@lobehub/editor/es/types/kernel';
 import type { LexicalEditor } from 'lexical';
 
 import { $isReferTopicNode, ReferTopicNode, type SerializedReferTopicNode } from './ReferTopicNode';
+
+type IEditorKernel = ReturnType<typeof getKernelFromEditor>;
 
 export interface ReferTopicPluginOptions {
   decorator: (node: ReferTopicNode, editor: LexicalEditor) => any;
   theme?: { referTopic?: string };
 }
 
-const REFER_TOPIC_REGEX = /^<referTopic\s+name="([^"]*)"\s+id="([^"]*)"\s*\/?>$/;
-
-export class ReferTopicPlugin {
+/**
+ * Editor plugin for ReferTopicNode. Implements {@link IEditorPlugin}.
+ * - Constructor: registers node, decorator, theme
+ * - onInit: called by kernel after Lexical editor creation; registers markdown/litexml writers & readers
+ * - destroy: cleanup
+ */
+export class ReferTopicPlugin implements IEditorPlugin<ReferTopicPluginOptions> {
   static pluginName = 'ReferTopicPlugin';
 
   config?: ReferTopicPluginOptions;
-  private kernel: any;
+  private kernel: IEditorKernel;
 
-  constructor(kernel: any, config?: ReferTopicPluginOptions) {
+  constructor(kernel: IEditorKernel, config?: ReferTopicPluginOptions) {
     this.kernel = kernel;
     this.config = config;
 
@@ -30,12 +37,9 @@ export class ReferTopicPlugin {
       kernel.registerThemes(config.theme);
     }
 
-    kernel.registerDecorator(
-      ReferTopicNode.getType(),
-      (node: ReferTopicNode, editor: LexicalEditor) => {
-        return config?.decorator ? config.decorator(node, editor) : null;
-      },
-    );
+    kernel.registerDecorator(ReferTopicNode.getType(), (node, editor) => {
+      return config?.decorator ? config.decorator(node as ReferTopicNode, editor) : null;
+    });
   }
 
   onInit(_editor: LexicalEditor): void {
@@ -51,29 +55,6 @@ export class ReferTopicPlugin {
         ctx.appendLine(`<referTopic name="${node.topicTitle}" id="${node.topicId}" />`);
       }
     });
-
-    mdService?.registerMarkdownReader(
-      'html',
-      (mdastNode: any) => {
-        const value = mdastNode?.value as string | undefined;
-        if (!value) return false;
-
-        const match = REFER_TOPIC_REGEX.exec(value.trim());
-        if (!match) return false;
-
-        const [, topicTitle, topicId] = match;
-        try {
-          const { INodeHelper } = require('@lobehub/editor/es/editor-kernel/inode/helper');
-          return INodeHelper.createElementNode(ReferTopicNode.getType(), {
-            topicId,
-            topicTitle,
-          } satisfies Partial<SerializedReferTopicNode>);
-        } catch {
-          return false;
-        }
-      },
-      MARKDOWN_READER_LEVEL_HIGH,
-    );
   }
 
   private registerLiteXml(): void {

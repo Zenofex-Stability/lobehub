@@ -41,6 +41,7 @@ import {
   hasNonActionContent,
   injectReferTopicNode,
   parseSelectedSkillsFromEditorData,
+  parseSelectedToolsFromEditorData,
   processCommands,
 } from './commandBus';
 
@@ -108,6 +109,7 @@ export class ConversationLifecycleActionImpl {
     let editorData = inputEditorData;
     const { internal_execAgentRuntime, mainInputEditor } = this.#get();
     const selectedSkills = parseSelectedSkillsFromEditorData(editorData);
+    const selectedTools = parseSelectedToolsFromEditorData(editorData);
 
     // Use context from params (required)
     const { agentId } = context;
@@ -472,8 +474,20 @@ export class ConversationLifecycleActionImpl {
       )(this.#get());
 
       try {
+        const agentRuntimeInitialContext =
+          selectedTools.length > 0 || selectedSkills.length > 0
+            ? {
+                initialContext: {
+                  ...(selectedSkills.length > 0 ? { selectedSkills } : undefined),
+                  ...(selectedTools.length > 0 ? { selectedTools } : undefined),
+                },
+                phase: 'init' as const,
+              }
+            : undefined;
+
         await internal_execAgentRuntime({
           context: execContext,
+          initialContext: agentRuntimeInitialContext,
           messages: displayMessages,
           parentMessageId: data.assistantMessageId,
           parentMessageType: 'assistant',

@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 
 import ActionTag from './ActionTag';
 import { ActionTagPlugin } from './ActionTagPlugin';
-import { actionTagTheme } from './style';
 
 const ReactActionTagPlugin: FC = () => {
   const [editor] = useLexicalComposerContext();
@@ -20,7 +19,6 @@ const ReactActionTagPlugin: FC = () => {
 
         return <ActionTag editor={lexicalEditor} label={label} node={node} />;
       },
-      theme: actionTagTheme,
     });
   }, [editor, t]);
 

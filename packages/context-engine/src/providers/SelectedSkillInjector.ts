@@ -1,3 +1,4 @@
+import { escapeXml } from '@lobechat/prompts';
 import type { RuntimeSelectedSkill } from '@lobechat/types';
 import debug from 'debug';
 
@@ -5,14 +6,6 @@ import { BaseLastUserContentProvider } from '../base/BaseLastUserContentProvider
 import type { PipelineContext, ProcessorOptions } from '../types';
 
 const log = debug('context-engine:provider:SelectedSkillInjector');
-
-const escapeXml = (value: string): string =>
-  value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
 
 export interface SelectedSkillInjectorConfig {
   selectedSkills?: RuntimeSelectedSkill[];

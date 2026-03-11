@@ -13,7 +13,7 @@ import {
 import type { ActionTagData } from './types';
 
 /**
- * Collects all available skills/tools and returns them as ActionTagData[] for the slash menu.
+ * Collects all available slash-selectable skills/tools and returns them as ActionTagData[].
  */
 export const useEnabledSkills = (): ActionTagData[] => {
   // All data sources
@@ -26,39 +26,42 @@ export const useEnabledSkills = (): ActionTagData[] => {
   const userAgentSkills = useToolStore(agentSkillsSelectors.getUserAgentSkills, isEqual);
 
   return useMemo(() => {
-    const skills: ActionTagData[] = [];
-
-    // Build a lookup: identifier → display name
-    const nameMap = new Map<string, string>();
+    const items: ActionTagData[] = [];
+    const skillNameMap = new Map<string, string>();
+    const toolNameMap = new Map<string, string>();
 
     for (const item of builtinList) {
-      nameMap.set(item.identifier, item.meta?.title || item.identifier);
-    }
-    for (const item of builtinSkills) {
-      nameMap.set(item.identifier, item.name || item.identifier);
+      toolNameMap.set(item.identifier, item.meta?.title || item.identifier);
     }
     for (const item of installedPlugins) {
-      nameMap.set(item.identifier, item.title || item.identifier);
+      toolNameMap.set(item.identifier, item.title || item.identifier);
     }
     for (const item of klavisServers) {
-      nameMap.set(item.identifier, item.serverName || item.identifier);
+      toolNameMap.set(item.identifier, item.serverName || item.identifier);
     }
     for (const item of lobehubSkillServers) {
-      nameMap.set(item.identifier, item.name || item.identifier);
+      toolNameMap.set(item.identifier, item.name || item.identifier);
+    }
+
+    for (const item of builtinSkills) {
+      skillNameMap.set(item.identifier, item.name || item.identifier);
     }
     for (const item of marketAgentSkills) {
-      nameMap.set(item.identifier, item.name || item.identifier);
+      skillNameMap.set(item.identifier, item.name || item.identifier);
     }
     for (const item of userAgentSkills) {
-      nameMap.set(item.identifier, item.name || item.identifier);
+      skillNameMap.set(item.identifier, item.name || item.identifier);
     }
 
-    // Collect all available skills (not just enabled ones)
-    for (const [id, label] of nameMap) {
-      skills.push({ category: 'skill', label, type: id });
+    for (const [id, label] of skillNameMap) {
+      items.push({ category: 'skill', label, type: id });
     }
 
-    return skills;
+    for (const [id, label] of toolNameMap) {
+      items.push({ category: 'tool', label, type: id });
+    }
+
+    return items;
   }, [
     builtinList,
     builtinSkills,

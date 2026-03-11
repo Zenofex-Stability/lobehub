@@ -1,25 +1,25 @@
-import { createStyles } from 'antd-style';
+import { createStaticStyles } from 'antd-style';
 
-const tagBase = (outlineColor: string, token: any) => `
+const tagBase = (outlineColor: string, borderRadius: string) => `
   cursor: default;
   user-select: none;
   display: inline-flex;
+  margin-inline-end: 4px;
 
   &.selected {
-    border-radius: ${token.borderRadius}px;
+    border-radius: ${borderRadius};
     outline: 2px solid ${outlineColor};
   }
 `;
 
-export const useStyles = createStyles(({ css, token }) => ({
+export const styles = createStaticStyles(({ css, cssVar }) => ({
   commandTag: css`
-    ${tagBase('#722ED1', token)}
+    ${tagBase('#722ED1', cssVar.borderRadius)}
   `,
   skillTag: css`
-    ${tagBase(token.colorPrimary, token)}
+    ${tagBase(cssVar.colorPrimary, cssVar.borderRadius)}
+  `,
+  toolTag: css`
+    ${tagBase(cssVar.colorWarning, cssVar.borderRadius)}
   `,
 }));
-
-export const actionTagTheme = {
-  actionTag: 'editor-action-tag',
-};

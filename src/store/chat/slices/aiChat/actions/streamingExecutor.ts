@@ -125,6 +125,13 @@ export class StreamingExecutorActionImpl {
     });
 
     const { agentConfig: agentConfigData, plugins: pluginIds } = agentConfig;
+    const selectedToolIds = initialContext?.initialContext?.selectedTools?.map(
+      (tool) => tool.identifier,
+    );
+    const mergedToolIds =
+      selectedToolIds && selectedToolIds.length > 0
+        ? [...new Set([...(pluginIds || []), ...selectedToolIds])]
+        : pluginIds;
 
     if (!agentConfigData || !agentConfigData.model) {
       throw new Error(
@@ -150,7 +157,7 @@ export class StreamingExecutorActionImpl {
       model: agentConfigData.model,
       provider: agentConfigData.provider!,
       skipDefaultTools: disableTools,
-      toolIds: pluginIds,
+      toolIds: mergedToolIds,
     });
 
     const enabledToolIds = toolsDetailed.enabledToolIds;

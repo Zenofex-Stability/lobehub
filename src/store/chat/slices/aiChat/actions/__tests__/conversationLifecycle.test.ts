@@ -5,9 +5,9 @@ import { aiChatService } from '@/services/aiChat';
 import { chatService } from '@/services/chat';
 import { messageService } from '@/services/message';
 import * as agentGroupStore from '@/store/agentGroup';
-import * as toolStoreModule from '@/store/tool';
 import { messageMapKey } from '@/store/chat/utils/messageMapKey';
 import { getSessionStoreState } from '@/store/session';
+import * as toolStoreModule from '@/store/tool';
 
 import { useChatStore } from '../../../../store';
 import { createMockMessage, TEST_CONTENT, TEST_IDS } from './fixtures';
@@ -242,15 +242,17 @@ describe('ConversationLifecycle actions', () => {
       it('should persist selected slash skills as preload messages before sending', async () => {
         const { result } = renderHook(() => useChatStore());
 
-        const sendMessageInServerSpy = vi.spyOn(aiChatService, 'sendMessageInServer').mockResolvedValue({
-          messages: [
-            createMockMessage({ id: TEST_IDS.USER_MESSAGE_ID, role: 'user' }),
-            createMockMessage({ id: TEST_IDS.ASSISTANT_MESSAGE_ID, role: 'assistant' }),
-          ],
-          topics: [],
-          assistantMessageId: TEST_IDS.ASSISTANT_MESSAGE_ID,
-          userMessageId: TEST_IDS.USER_MESSAGE_ID,
-        } as any);
+        const sendMessageInServerSpy = vi
+          .spyOn(aiChatService, 'sendMessageInServer')
+          .mockResolvedValue({
+            messages: [
+              createMockMessage({ id: TEST_IDS.USER_MESSAGE_ID, role: 'user' }),
+              createMockMessage({ id: TEST_IDS.ASSISTANT_MESSAGE_ID, role: 'assistant' }),
+            ],
+            topics: [],
+            assistantMessageId: TEST_IDS.ASSISTANT_MESSAGE_ID,
+            userMessageId: TEST_IDS.USER_MESSAGE_ID,
+          } as any);
         vi.spyOn(toolStoreModule, 'getToolStoreState').mockReturnValue({
           agentSkillDetailMap: {},
           agentSkills: [],
@@ -306,7 +308,8 @@ describe('ConversationLifecycle actions', () => {
         expect(sendMessageInServerSpy).toHaveBeenCalledWith(
           expect.objectContaining({
             newUserMessage: expect.objectContaining({
-              content: '<action type="user_memory" category="skill" /> ' + TEST_CONTENT.USER_MESSAGE,
+              content:
+                '<action type="user_memory" category="skill" /> ' + TEST_CONTENT.USER_MESSAGE,
               editorData: expect.objectContaining({
                 root: expect.any(Object),
               }),
@@ -347,7 +350,8 @@ describe('ConversationLifecycle actions', () => {
           expect.any(AbortController),
         );
         expect(
-          sendMessageInServerSpy.mock.calls[0]?.[0].newUserMessage.editorData?.root.children[0].children,
+          sendMessageInServerSpy.mock.calls[0]?.[0].newUserMessage.editorData?.root.children[0]
+            .children,
         ).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
@@ -358,8 +362,16 @@ describe('ConversationLifecycle actions', () => {
           ]),
         );
         expect(result.current.internal_execAgentRuntime).toHaveBeenCalledWith(
-          expect.not.objectContaining({
-            initialContext: expect.anything(),
+          expect.objectContaining({
+            initialContext: expect.objectContaining({
+              initialContext: {
+                selectedSkills: [
+                  { identifier: 'user_memory', name: 'User Memory' },
+                  { identifier: 'instruction', name: 'Instruction' },
+                ],
+              },
+              phase: 'init',
+            }),
           }),
         );
       });
@@ -407,6 +419,65 @@ describe('ConversationLifecycle actions', () => {
           expect.any(AbortController),
         );
         expect(result.current.internal_execAgentRuntime).toHaveBeenCalled();
+      });
+
+      it('should pass selected tool tags into runtime initialContext', async () => {
+        const { result } = renderHook(() => useChatStore());
+
+        vi.spyOn(aiChatService, 'sendMessageInServer').mockResolvedValue({
+          messages: [
+            createMockMessage({ id: TEST_IDS.USER_MESSAGE_ID, role: 'user' }),
+            createMockMessage({ id: TEST_IDS.ASSISTANT_MESSAGE_ID, role: 'assistant' }),
+          ],
+          topics: [],
+          assistantMessageId: TEST_IDS.ASSISTANT_MESSAGE_ID,
+          userMessageId: TEST_IDS.USER_MESSAGE_ID,
+        } as any);
+
+        await act(async () => {
+          await result.current.sendMessage({
+            context: createTestContext(),
+            editorData: {
+              root: {
+                children: [
+                  {
+                    children: [
+                      {
+                        actionCategory: 'tool',
+                        actionLabel: 'Notebook',
+                        actionType: 'lobe-notebook',
+                        type: 'action-tag',
+                      },
+                      {
+                        actionCategory: 'tool',
+                        actionLabel: 'Artifacts',
+                        actionType: 'lobe-artifacts',
+                        type: 'action-tag',
+                      },
+                    ],
+                    type: 'paragraph',
+                  },
+                ],
+                type: 'root',
+              },
+            } as any,
+            message: TEST_CONTENT.USER_MESSAGE,
+          });
+        });
+
+        expect(result.current.internal_execAgentRuntime).toHaveBeenCalledWith(
+          expect.objectContaining({
+            initialContext: expect.objectContaining({
+              initialContext: {
+                selectedTools: [
+                  { identifier: 'lobe-notebook', name: 'Notebook' },
+                  { identifier: 'lobe-artifacts', name: 'Artifacts' },
+                ],
+              },
+              phase: 'init',
+            }),
+          }),
+        );
       });
     });
 

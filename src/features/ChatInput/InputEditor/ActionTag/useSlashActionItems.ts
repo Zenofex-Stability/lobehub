@@ -54,16 +54,16 @@ export const useSlashActionItems = (): SlashOptions['items'] => {
         },
       });
 
-      const makeSkillItem = (skill: ActionTagData): SlashMenuOption => ({
+      const makeActionItem = (item: ActionTagData): SlashMenuOption => ({
         icon: WrenchIcon,
-        key: `skill-${skill.type}`,
-        label: skill.label,
-        metadata: { category: 'skill', type: skill.type },
+        key: `${item.category}-${item.type}`,
+        label: item.label,
+        metadata: { category: item.category, type: item.type },
         onSelect: (editor: IEditor) => {
           const payload: InsertActionTagPayload = {
-            category: 'skill',
-            label: skill.label,
-            type: skill.type,
+            category: item.category,
+            label: item.label,
+            type: item.type,
           };
           editor.dispatchCommand(INSERT_ACTION_TAG_COMMAND, payload);
         },
@@ -97,11 +97,11 @@ export const useSlashActionItems = (): SlashOptions['items'] => {
         allItems.push(makeCommandItem(action) as SlashItem);
       }
 
-      // 2. Enabled skills from agent config
+      // 2. Enabled slash-selectable skills/tools
       if (enabledSkills.length > 0) {
         allItems.push({ type: 'divider' } as SlashItem);
-        for (const skill of enabledSkills) {
-          allItems.push(makeSkillItem(skill) as SlashItem);
+        for (const item of enabledSkills) {
+          allItems.push(makeActionItem(item) as SlashItem);
         }
       }
 

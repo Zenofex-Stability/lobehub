@@ -293,13 +293,14 @@ describe('contextEngineering', () => {
     expect(Object.keys(systemMessage!).length).toEqual(2);
   });
 
-  it('should strip raw skill action tags from user messages', async () => {
+  it('should strip raw action tags from user messages before sending to model', async () => {
     vi.spyOn(isCanUseFCModule, 'isCanUseFC').mockReturnValue(true);
 
     const messages: UIChatMessage[] = [
       {
         role: 'user',
-        content: '<action type="grep" category="skill" /> hi',
+        content:
+          '<action type="grep" category="skill" /> <action type="lobe-notebook" category="tool" /> hi',
         createdAt: Date.now(),
         id: 'selected-skill-user',
         updatedAt: Date.now(),
@@ -316,6 +317,7 @@ describe('contextEngineering', () => {
     expect(result[1].role).toBe('user');
     expect(result[1].content).toContain('hi');
     expect(result[1].content).not.toContain('<action type="grep" category="skill" />');
+    expect(result[1].content).not.toContain('<action type="lobe-notebook" category="tool" />');
   });
 
   describe('getAssistantContent', () => {

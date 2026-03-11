@@ -832,6 +832,7 @@ describe('StreamingExecutor actions', () => {
           phase: 'init',
           initialContext: {
             selectedSkills: [{ identifier: 'user_memory', name: 'User Memory' }],
+            selectedTools: [{ identifier: 'lobe-notebook', name: 'Notebook' }],
           },
         },
       });
@@ -843,7 +844,134 @@ describe('StreamingExecutor actions', () => {
           metadata: { title: 'Test Doc', charCount: 15, lineCount: 1 },
         },
         selectedSkills: [{ identifier: 'user_memory', name: 'User Memory' }],
+        selectedTools: [{ identifier: 'lobe-notebook', name: 'Notebook' }],
       });
+    });
+
+    it('should merge selectedTools into generated tools when provided', () => {
+      act(() => {
+        useChatStore.setState({ internal_execAgentRuntime: realExecAgentRuntime });
+      });
+
+      const { result } = renderHook(() => useChatStore());
+      const userMessage = {
+        id: TEST_IDS.USER_MESSAGE_ID,
+        role: 'user',
+        content: TEST_CONTENT.USER_MESSAGE,
+        sessionId: TEST_IDS.SESSION_ID,
+        topicId: TEST_IDS.TOPIC_ID,
+      } as UIChatMessage;
+
+      const generateToolsDetailed = vi.fn().mockReturnValue({
+        enabledManifests: [],
+        enabledToolIds: ['lobe-notebook'],
+        tools: [],
+      });
+
+      vi.spyOn(agentConfigResolver, 'resolveAgentConfig').mockReturnValue({
+        agentConfig: createMockAgentConfig(),
+        chatConfig: createMockChatConfig(),
+        isBuiltinAgent: false,
+        plugins: ['lobe-artifacts'],
+      });
+      vi.spyOn(toolEngineering, 'createAgentToolsEngine').mockReturnValue({
+        generateToolsDetailed,
+      } as any);
+
+      result.current.internal_createAgentState({
+        messages: [userMessage],
+        parentMessageId: userMessage.id,
+        agentId: TEST_IDS.SESSION_ID,
+        topicId: TEST_IDS.TOPIC_ID,
+        initialContext: {
+          phase: 'init',
+          initialContext: {
+            selectedTools: [{ identifier: 'lobe-notebook', name: 'Notebook' }],
+          },
+        },
+      });
+
+      expect(generateToolsDetailed).toHaveBeenCalledWith(
+        expect.objectContaining({
+          skipDefaultTools: undefined,
+          toolIds: ['lobe-artifacts', 'lobe-notebook'],
+        }),
+      );
+    });
+
+    it('should pass merged resolvedAgentConfig to chatService when selectedTools are provided', async () => {
+      act(() => {
+        useChatStore.setState({ internal_execAgentRuntime: realExecAgentRuntime });
+      });
+
+      const { result } = renderHook(() => useChatStore());
+      const userMessage = {
+        id: TEST_IDS.USER_MESSAGE_ID,
+        role: 'user',
+        content: TEST_CONTENT.USER_MESSAGE,
+        sessionId: TEST_IDS.SESSION_ID,
+        topicId: TEST_IDS.TOPIC_ID,
+      } as UIChatMessage;
+
+      vi.spyOn(agentConfigResolver, 'resolveAgentConfig').mockReturnValue({
+        agentConfig: createMockAgentConfig(),
+        chatConfig: createMockChatConfig(),
+        isBuiltinAgent: false,
+        plugins: ['lobe-artifacts'],
+      });
+      vi.spyOn(toolEngineering, 'createAgentToolsEngine').mockReturnValue({
+        generateToolsDetailed: vi.fn().mockReturnValue({
+          enabledManifests: [{ identifier: 'lobe-artifacts' }, { identifier: 'lobe-notebook' }],
+          enabledToolIds: ['lobe-artifacts', 'lobe-notebook'],
+          tools: [
+            {
+              function: { name: 'lobe-artifacts____create' },
+              type: 'function',
+            },
+            {
+              function: { name: 'lobe-notebook____createDocument' },
+              type: 'function',
+            },
+          ],
+        }),
+      } as any);
+
+      const streamSpy = vi
+        .spyOn(chatService, 'createAssistantMessageStream')
+        .mockImplementation(async ({ onFinish, params }) => {
+          expect(params.resolvedAgentConfig.enabledToolIds).toEqual([
+            'lobe-artifacts',
+            'lobe-notebook',
+          ]);
+          expect(params.resolvedAgentConfig.tools).toEqual([
+            {
+              function: { name: 'lobe-artifacts____create' },
+              type: 'function',
+            },
+            {
+              function: { name: 'lobe-notebook____createDocument' },
+              type: 'function',
+            },
+          ]);
+          await onFinish?.(TEST_CONTENT.AI_RESPONSE, {} as any);
+        });
+
+      await act(async () => {
+        await result.current.internal_execAgentRuntime({
+          context: { agentId: TEST_IDS.SESSION_ID, topicId: TEST_IDS.TOPIC_ID },
+          initialContext: {
+            phase: 'init',
+            initialContext: {
+              selectedTools: [{ identifier: 'lobe-notebook', name: 'Notebook' }],
+            },
+          },
+          messages: [userMessage],
+          parentMessageId: userMessage.id,
+          parentMessageType: 'user',
+        });
+      });
+
+      expect(streamSpy).toHaveBeenCalled();
     });
   });
 

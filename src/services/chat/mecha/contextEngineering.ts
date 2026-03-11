@@ -45,8 +45,8 @@ import {
 
 import { isCanUseVideo, isCanUseVision } from '../helper';
 import { combineUserMemoryData, resolveTopicMemories, resolveUserPersona } from './memoryManager';
-import { stripSkillActionTagsFromText } from './skillPreload';
 import { createSkillEngine } from './skillEngineering';
+import { stripActionTagsFromText } from './skillPreload';
 
 const log = debug('context-engine:contextEngineering');
 
@@ -101,7 +101,7 @@ const preprocessActionTags = (messages: UIChatMessage[]): UIChatMessage[] =>
     if (typeof message.content === 'string') {
       return {
         ...message,
-        content: stripSkillActionTagsFromText(message.content),
+        content: stripActionTagsFromText(message.content),
       };
     }
 
@@ -112,7 +112,7 @@ const preprocessActionTags = (messages: UIChatMessage[]): UIChatMessage[] =>
         ...message,
         content: contentParts.map((part) =>
           part?.type === 'text' && typeof part.text === 'string'
-            ? { ...part, text: stripSkillActionTagsFromText(part.text) }
+            ? { ...part, text: stripActionTagsFromText(part.text) }
             : part,
         ),
       } as unknown as UIChatMessage;

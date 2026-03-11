@@ -1,30 +1,37 @@
 import {
+  type getKernelFromEditor,
   ILitexmlService,
   IMarkdownShortCutService,
-  MARKDOWN_READER_LEVEL_HIGH,
 } from '@lobehub/editor';
-import type { LexicalEditor } from 'lexical';
+import type { IEditorPlugin } from '@lobehub/editor/es/types/kernel';
+import type { LexicalEditor, LexicalNode } from 'lexical';
 
 import { $isActionTagNode, ActionTagNode, type SerializedActionTagNode } from './ActionTagNode';
 import { registerActionTagCommand } from './command';
 import { registerActionTagSelectionObserver } from './selectionObserver';
 import type { ActionTagCategory, ActionTagType } from './types';
 
+type IEditorKernel = ReturnType<typeof getKernelFromEditor>;
+
 export interface ActionTagPluginOptions {
   decorator: (node: ActionTagNode, editor: LexicalEditor) => any;
   theme?: { actionTag?: string };
 }
 
-const ACTION_TAG_REGEX = /^<action\s+type="([^"]+)"\s+category="([^"]+)"\s*\/?>$/;
-
-export class ActionTagPlugin {
+/**
+ * Editor plugin for ActionTagNode. Implements {@link IEditorPlugin}.
+ * - Constructor: registers node, decorator, theme
+ * - onInit: called by kernel after Lexical editor creation; registers command, selection observer, markdown/litexml
+ * - destroy: cleanup
+ */
+export class ActionTagPlugin implements IEditorPlugin<ActionTagPluginOptions> {
   static pluginName = 'ActionTagPlugin';
 
   config?: ActionTagPluginOptions;
-  private kernel: any; // IEditorKernel (not exported from public API)
+  private kernel: IEditorKernel;
   private clears: Array<() => void> = [];
 
-  constructor(kernel: any, config?: ActionTagPluginOptions) {
+  constructor(kernel: IEditorKernel, config?: ActionTagPluginOptions) {
     this.kernel = kernel;
     this.config = config;
 
@@ -36,8 +43,8 @@ export class ActionTagPlugin {
 
     kernel.registerDecorator(
       ActionTagNode.getType(),
-      (node: ActionTagNode, editor: LexicalEditor) => {
-        return config?.decorator ? config.decorator(node, editor) : null;
+      (node: LexicalNode, editor: LexicalEditor) => {
+        return config?.decorator ? config.decorator(node as ActionTagNode, editor) : null;
       },
     );
   }
@@ -58,33 +65,6 @@ export class ActionTagPlugin {
         ctx.appendLine(`<action type="${node.actionType}" category="${node.actionCategory}" />`);
       }
     });
-
-    // Reader: markdown → ActionTagNode (used when loading markdown back into editor)
-    mdService?.registerMarkdownReader(
-      'html',
-      (mdastNode: any) => {
-        const value = mdastNode?.value as string | undefined;
-        if (!value) return false;
-
-        const match = ACTION_TAG_REGEX.exec(value.trim());
-        if (!match) return false;
-
-        const [, actionType, actionCategory] = match;
-
-        // Dynamically import INodeHelper to avoid deep import at module level
-        try {
-          const { INodeHelper } = require('@lobehub/editor/es/editor-kernel/inode/helper');
-          return INodeHelper.createElementNode(ActionTagNode.getType(), {
-            actionCategory: actionCategory as ActionTagCategory,
-            actionLabel: actionType,
-            actionType: actionType as ActionTagType,
-          } satisfies Partial<SerializedActionTagNode>);
-        } catch {
-          return false;
-        }
-      },
-      MARKDOWN_READER_LEVEL_HIGH,
-    );
   }
 
   private registerLiteXml(): void {
