@@ -154,7 +154,22 @@ export function sharedRendererDefine(options: { isElectron: boolean; isMobile: b
   };
 }
 
+const monorepoPackages = [
+  '@lobechat/model-runtime',
+  'model-bank',
+  '@lobechat/types',
+  '@lobechat/prompts',
+  '@lobechat/context-engine',
+  '@lobechat/utils',
+  '@lobechat/const',
+  '@lobechat/agent-runtime',
+  '@lobechat/electron-client-ipc',
+  '@lobechat/conversation-flow',
+  '@lobechat/builtin-agents',
+];
+
 export const sharedOptimizeDeps = {
+  exclude: isDev ? monorepoPackages : [],
   include: [
     'react',
     'react-dom',
@@ -175,17 +190,7 @@ export const sharedOptimizeDeps = {
     'ahooks',
     'motion/react',
 
-    // monorepo packages — pre-bundle to reduce request count
-    '@lobechat/model-runtime',
-    'model-bank',
-    '@lobechat/types',
-    '@lobechat/prompts',
-    '@lobechat/context-engine',
-    '@lobechat/utils',
-    '@lobechat/const',
-    '@lobechat/agent-runtime',
-    '@lobechat/electron-client-ipc',
-    '@lobechat/conversation-flow',
-    '@lobechat/builtin-agents',
+    // monorepo packages — pre-bundle only in production to reduce request count
+    ...(isDev ? [] : monorepoPackages),
   ],
 };

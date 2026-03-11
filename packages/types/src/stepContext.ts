@@ -66,6 +66,21 @@ export interface InitialPageEditorContext {
 }
 
 /**
+ * User-selected skill context for the current request
+ * Captured from slash-menu skill action tags before send
+ */
+export interface RuntimeSelectedSkill {
+  /**
+   * Skill identifier used by runtime/tooling
+   */
+  identifier: string;
+  /**
+   * Human-readable skill name shown in the input UI
+   */
+  name: string;
+}
+
+/**
  * Runtime Step Context
  *
  * Contains dynamically computed state that changes between steps.
@@ -110,4 +125,9 @@ export interface RuntimeInitialContext {
    * Contains markdown content and metadata captured at operation start
    */
   pageEditor?: InitialPageEditorContext;
+  /**
+   * Skills explicitly selected by the user for the current request
+   * This is ephemeral runtime context and is not persisted to chat history
+   */
+  selectedSkills?: RuntimeSelectedSkill[];
 }

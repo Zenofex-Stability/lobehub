@@ -248,23 +248,36 @@ export class StreamingExecutorActionImpl {
       }
     }
 
+    const mergedRuntimeInitialContext =
+      runtimeInitialContext || initialContext?.initialContext
+        ? {
+            ...runtimeInitialContext,
+            ...initialContext?.initialContext,
+          }
+        : undefined;
+
     // Create initial context or use provided context
-    const context: AgentRuntimeContext = initialContext || {
-      phase: 'init',
-      payload: {
-        model: agentConfigData.model,
-        provider: agentConfigData.provider,
-        parentMessageId,
-      },
-      session: {
-        sessionId: agentId,
-        messageCount: messages.length,
-        status: state.status,
-        stepCount: 0,
-      },
-      // Inject initialContext if available
-      initialContext: runtimeInitialContext,
-    };
+    const context: AgentRuntimeContext = initialContext
+      ? {
+          ...initialContext,
+          initialContext: mergedRuntimeInitialContext,
+        }
+      : {
+          phase: 'init',
+          payload: {
+            model: agentConfigData.model,
+            provider: agentConfigData.provider,
+            parentMessageId,
+          },
+          session: {
+            sessionId: agentId,
+            messageCount: messages.length,
+            status: state.status,
+            stepCount: 0,
+          },
+          // Inject initialContext if available
+          initialContext: mergedRuntimeInitialContext,
+        };
 
     return { agentConfig: agentConfigWithTools, context, state, toolsEngine };
   };

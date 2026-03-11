@@ -1,8 +1,6 @@
 import isEqual from 'fast-deep-equal';
 import { useMemo } from 'react';
 
-import { useAgentStore } from '@/store/agent';
-import { agentByIdSelectors } from '@/store/agent/selectors';
 import { useToolStore } from '@/store/tool';
 import {
   agentSkillsSelectors,
@@ -12,21 +10,12 @@ import {
   pluginSelectors,
 } from '@/store/tool/selectors';
 
-import { useAgentId } from '../../hooks/useAgentId';
 import type { ActionTagData } from './types';
 
 /**
- * Collects all enabled skills/tools for the current agent
- * and returns them as ActionTagData[] for the slash menu.
+ * Collects all available skills/tools and returns them as ActionTagData[] for the slash menu.
  */
 export const useEnabledSkills = (): ActionTagData[] => {
-  const agentId = useAgentId();
-
-  const enabledPlugins = useAgentStore(
-    (s) => agentByIdSelectors.getAgentPluginsById(agentId)(s),
-    isEqual,
-  );
-
   // All data sources
   const builtinList = useToolStore(builtinToolSelectors.metaList, isEqual);
   const builtinSkills = useToolStore(builtinToolSelectors.installedBuiltinSkills, isEqual);
@@ -37,7 +26,6 @@ export const useEnabledSkills = (): ActionTagData[] => {
   const userAgentSkills = useToolStore(agentSkillsSelectors.getUserAgentSkills, isEqual);
 
   return useMemo(() => {
-    const enabledSet = new Set(enabledPlugins);
     const skills: ActionTagData[] = [];
 
     // Build a lookup: identifier → display name
@@ -65,17 +53,13 @@ export const useEnabledSkills = (): ActionTagData[] => {
       nameMap.set(item.identifier, item.name || item.identifier);
     }
 
-    // Collect enabled ones
-    for (const id of enabledSet) {
-      const label = nameMap.get(id);
-      if (label) {
-        skills.push({ category: 'skill', label, type: id });
-      }
+    // Collect all available skills (not just enabled ones)
+    for (const [id, label] of nameMap) {
+      skills.push({ category: 'skill', label, type: id });
     }
 
     return skills;
   }, [
-    enabledPlugins,
     builtinList,
     builtinSkills,
     installedPlugins,

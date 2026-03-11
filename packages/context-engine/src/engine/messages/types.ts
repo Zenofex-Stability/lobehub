@@ -1,6 +1,10 @@
 /* eslint-disable perfectionist/sort-interfaces */
 import type { FileContent, KnowledgeBaseInfo, PageContentContext } from '@lobechat/prompts';
-import type { RuntimeInitialContext, RuntimeStepContext } from '@lobechat/types';
+import type {
+  RuntimeInitialContext,
+  RuntimeSelectedSkill,
+  RuntimeStepContext,
+} from '@lobechat/types';
 
 import type { OpenAIChatMessage, UIChatMessage } from '@/types/index';
 
@@ -239,6 +243,8 @@ export interface MessagesEngineParams {
   // ========== Skills ==========
   /** Skills configuration */
   skillsConfig?: SkillsConfig;
+  /** Skills explicitly selected by the user for the current request */
+  selectedSkills?: RuntimeSelectedSkill[];
 
   // ========== Tool Discovery ==========
   /** Tool Discovery configuration (available tools for dynamic activation) */

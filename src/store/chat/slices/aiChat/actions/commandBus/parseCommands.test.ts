@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseCommandsFromEditorData } from './parseCommands';
+import { parseCommandsFromEditorData, parseSelectedSkillsFromEditorData } from './parseCommands';
 
 describe('parseCommandsFromEditorData', () => {
   it('should return empty array for undefined editorData', () => {
@@ -77,5 +77,76 @@ describe('parseCommandsFromEditorData', () => {
     expect(result).toHaveLength(2);
     expect(result[0].type).toBe('newTopic');
     expect(result[1].type).toBe('translate');
+  });
+});
+
+describe('parseSelectedSkillsFromEditorData', () => {
+  it('should return selected skills only', () => {
+    const editorData = {
+      root: {
+        children: [
+          {
+            children: [
+              {
+                actionCategory: 'command',
+                actionLabel: 'Compact context',
+                actionType: 'compact',
+                type: 'action-tag',
+              },
+              {
+                actionCategory: 'skill',
+                actionLabel: 'User Memory',
+                actionType: 'user_memory',
+                type: 'action-tag',
+              },
+              {
+                actionCategory: 'skill',
+                actionLabel: 'Instruction',
+                actionType: 'instruction',
+                type: 'action-tag',
+              },
+            ],
+            type: 'paragraph',
+          },
+        ],
+        type: 'root',
+      },
+    };
+
+    expect(parseSelectedSkillsFromEditorData(editorData)).toEqual([
+      { identifier: 'user_memory', name: 'User Memory' },
+      { identifier: 'instruction', name: 'Instruction' },
+    ]);
+  });
+
+  it('should deduplicate selected skills by identifier', () => {
+    const editorData = {
+      root: {
+        children: [
+          {
+            children: [
+              {
+                actionCategory: 'skill',
+                actionLabel: 'User Memory',
+                actionType: 'user_memory',
+                type: 'action-tag',
+              },
+              {
+                actionCategory: 'skill',
+                actionLabel: 'User Memory Duplicate',
+                actionType: 'user_memory',
+                type: 'action-tag',
+              },
+            ],
+            type: 'paragraph',
+          },
+        ],
+        type: 'root',
+      },
+    };
+
+    expect(parseSelectedSkillsFromEditorData(editorData)).toEqual([
+      { identifier: 'user_memory', name: 'User Memory' },
+    ]);
   });
 });

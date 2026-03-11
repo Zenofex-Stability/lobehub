@@ -1,26 +1,58 @@
+import type { RuntimeSelectedSkill } from '@lobechat/types';
+
 import type {
   ActionTagCategory,
   ActionTagType,
 } from '@/features/ChatInput/InputEditor/ActionTag/types';
 
-export interface ParsedCommand {
+export interface ParsedActionTag {
   category: ActionTagCategory;
   label: string;
   type: ActionTagType;
 }
 
+export interface ParsedCommand extends ParsedActionTag {}
+
 /**
  * Walk the Lexical JSON tree to find all action-tag nodes.
- * Returns the extracted commands in document order.
+ * Returns the extracted action tags in document order.
  */
-export const parseCommandsFromEditorData = (
+export const parseActionTagsFromEditorData = (
   editorData: Record<string, any> | undefined,
-): ParsedCommand[] => {
+): ParsedActionTag[] => {
   if (!editorData) return [];
 
-  const commands: ParsedCommand[] = [];
-  walkNode(editorData.root, commands);
-  return commands;
+  const actionTags: ParsedActionTag[] = [];
+  walkNode(editorData.root, actionTags);
+  return actionTags;
+};
+
+export const parseCommandsFromEditorData = (
+  editorData: Record<string, any> | undefined,
+): ParsedCommand[] => parseActionTagsFromEditorData(editorData);
+
+export const parseSelectedSkillsFromEditorData = (
+  editorData: Record<string, any> | undefined,
+): RuntimeSelectedSkill[] => {
+  const actionTags = parseActionTagsFromEditorData(editorData);
+  const selectedSkills = actionTags.filter((tag) => tag.category === 'skill');
+
+  if (selectedSkills.length === 0) return [];
+
+  const seen = new Set<string>();
+
+  return selectedSkills.reduce<RuntimeSelectedSkill[]>((acc, skill) => {
+    const identifier = String(skill.type);
+    if (!identifier || seen.has(identifier)) return acc;
+
+    seen.add(identifier);
+    acc.push({
+      identifier,
+      name: skill.label || identifier,
+    });
+
+    return acc;
+  }, []);
 };
 
 /**
@@ -47,7 +79,7 @@ function collectText(node: any, out: string[]): void {
   }
 }
 
-function walkNode(node: any, out: ParsedCommand[]): void {
+function walkNode(node: any, out: ParsedActionTag[]): void {
   if (!node) return;
 
   if (node.type === 'action-tag') {

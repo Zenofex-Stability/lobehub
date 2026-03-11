@@ -2,8 +2,10 @@ import { type UIChatMessage } from '@lobechat/types';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import * as toolEngineering from '@/helpers/toolEngineering';
 import { chatService } from '@/services/chat';
 import * as agentConfigResolver from '@/services/chat/mecha/agentConfigResolver';
+import { pageAgentRuntime } from '@/store/tool/slices/builtin/executors/lobe-page-agent';
 
 import { useChatStore } from '../../../../store';
 import {
@@ -786,6 +788,62 @@ describe('StreamingExecutor actions', () => {
       });
 
       streamSpy.mockRestore();
+    });
+
+    it('should merge provided initialContext with runtime page editor context', () => {
+      act(() => {
+        useChatStore.setState({ internal_execAgentRuntime: realExecAgentRuntime });
+      });
+
+      const { result } = renderHook(() => useChatStore());
+      const userMessage = {
+        id: TEST_IDS.USER_MESSAGE_ID,
+        role: 'user',
+        content: TEST_CONTENT.USER_MESSAGE,
+        sessionId: TEST_IDS.SESSION_ID,
+        topicId: TEST_IDS.TOPIC_ID,
+      } as UIChatMessage;
+
+      vi.spyOn(agentConfigResolver, 'resolveAgentConfig').mockReturnValue({
+        agentConfig: createMockAgentConfig(),
+        chatConfig: createMockChatConfig(),
+        isBuiltinAgent: false,
+        plugins: ['lobe-page-agent'],
+      });
+      vi.spyOn(toolEngineering, 'createAgentToolsEngine').mockReturnValue({
+        generateToolsDetailed: vi.fn().mockReturnValue({
+          enabledManifests: [],
+          enabledToolIds: ['lobe-page-agent'],
+          tools: [],
+        }),
+      } as any);
+      vi.spyOn(pageAgentRuntime, 'getPageContentContext').mockReturnValue({
+        markdown: '# Test Document',
+        xml: '<root><h1>Test</h1></root>',
+        metadata: { title: 'Test Doc', charCount: 15, lineCount: 1 },
+      });
+
+      const { context } = result.current.internal_createAgentState({
+        messages: [userMessage],
+        parentMessageId: userMessage.id,
+        agentId: TEST_IDS.SESSION_ID,
+        topicId: TEST_IDS.TOPIC_ID,
+        initialContext: {
+          phase: 'init',
+          initialContext: {
+            selectedSkills: [{ identifier: 'user_memory', name: 'User Memory' }],
+          },
+        },
+      });
+
+      expect(context.initialContext).toEqual({
+        pageEditor: {
+          markdown: '# Test Document',
+          xml: '<root><h1>Test</h1></root>',
+          metadata: { title: 'Test Doc', charCount: 15, lineCount: 1 },
+        },
+        selectedSkills: [{ identifier: 'user_memory', name: 'User Memory' }],
+      });
     });
   });
 

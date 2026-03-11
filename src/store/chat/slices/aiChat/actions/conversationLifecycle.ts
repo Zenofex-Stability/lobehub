@@ -17,6 +17,7 @@ import { t } from 'i18next';
 import { markUserValidAction } from '@/business/client/markUserValidAction';
 import { aiChatService } from '@/services/aiChat';
 import { chatService } from '@/services/chat';
+import { prepareSelectedSkillPreload } from '@/services/chat/mecha/skillPreload';
 import { messageService } from '@/services/message';
 import { getAgentStoreState } from '@/store/agent';
 import { agentSelectors } from '@/store/agent/selectors';
@@ -39,6 +40,7 @@ import {
   type CommandSendOverrides,
   hasNonActionContent,
   injectReferTopicNode,
+  parseSelectedSkillsFromEditorData,
   processCommands,
 } from './commandBus';
 
@@ -105,6 +107,7 @@ export class ConversationLifecycleActionImpl {
   }: SendMessageWithContextParams): Promise<SendMessageResult | undefined> => {
     let editorData = inputEditorData;
     const { internal_execAgentRuntime, mainInputEditor } = this.#get();
+    const selectedSkills = parseSelectedSkillsFromEditorData(editorData);
 
     // Use context from params (required)
     const { agentId } = context;
@@ -182,6 +185,10 @@ export class ConversationLifecycleActionImpl {
     };
 
     const fileIdList = files?.map((f) => f.id);
+    const preloadMessages = await prepareSelectedSkillPreload({
+      message,
+      selectedSkills,
+    });
 
     const hasFile = !!fileIdList && fileIdList.length > 0;
 
@@ -304,6 +311,7 @@ export class ConversationLifecycleActionImpl {
             pageSelections,
             parentId,
           },
+          preloadMessages: preloadMessages.length > 0 ? preloadMessages : undefined,
           // if there is topicId，then add topicId to message
           topicId: topicId ?? undefined,
           threadId: operationContext.threadId ?? undefined,

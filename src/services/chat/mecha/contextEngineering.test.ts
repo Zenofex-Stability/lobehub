@@ -292,6 +292,32 @@ describe('contextEngineering', () => {
     expect(systemMessage!.content).toContain(historySummary);
     expect(Object.keys(systemMessage!).length).toEqual(2);
   });
+
+  it('should strip raw skill action tags from user messages', async () => {
+    vi.spyOn(isCanUseFCModule, 'isCanUseFC').mockReturnValue(true);
+
+    const messages: UIChatMessage[] = [
+      {
+        role: 'user',
+        content: '<action type="grep" category="skill" /> hi',
+        createdAt: Date.now(),
+        id: 'selected-skill-user',
+        updatedAt: Date.now(),
+      },
+    ];
+
+    const result = await contextEngineering({
+      messages,
+      model: 'gpt-4',
+      provider: 'openai',
+    });
+
+    expect(result[0]).toEqual({ content: getCurrentDateContent(), role: 'system' });
+    expect(result[1].role).toBe('user');
+    expect(result[1].content).toContain('hi');
+    expect(result[1].content).not.toContain('<action type="grep" category="skill" />');
+  });
+
   describe('getAssistantContent', () => {
     it('should handle assistant message with imageList and content', async () => {
       // Mock isCanUseVision to return true for vision models

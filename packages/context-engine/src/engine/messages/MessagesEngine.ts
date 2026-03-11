@@ -34,6 +34,7 @@ import {
   KnowledgeInjector,
   PageEditorContextInjector,
   PageSelectionsInjector,
+  SelectedSkillInjector,
   SkillContextProvider,
   SystemDateProvider,
   SystemRoleInjector,
@@ -126,6 +127,7 @@ export class MessagesEngine {
       formatHistorySummary,
       knowledge,
       skillsConfig,
+      selectedSkills,
       toolDiscoveryConfig,
       toolsConfig,
       capabilities,
@@ -154,6 +156,8 @@ export class MessagesEngine {
     const isGroupContextEnabled =
       isAgentGroupEnabled || !!agentGroup?.currentAgentId || !!agentGroup?.members;
     const isUserMemoryEnabled = userMemory?.enabled && userMemory?.memories;
+    const hasSelectedSkills = (selectedSkills?.length ?? 0) > 0;
+
     // Page editor is enabled if either direct pageContentContext or initialContext.pageEditor is provided
     const isPageEditorEnabled = !!pageContentContext || !!initialContext?.pageEditor;
     // GTD is enabled if gtd.enabled is true and either plan or todos is provided
@@ -269,16 +273,19 @@ export class MessagesEngine {
         historySummary,
       }),
 
-      // 14. Page Selections injection (inject user-selected text into each user message that has them)
+      // 14. Selected skill injection (ephemeral user-selected slash skills for this request)
+      ...(hasSelectedSkills ? [new SelectedSkillInjector({ selectedSkills })] : []),
+
+      // 15. Page Selections injection (inject user-selected text into each user message that has them)
       new PageSelectionsInjector({ enabled: isPageEditorEnabled }),
 
-      // 15. Page Editor context injection (inject current page content to last user message)
+      // 16. Page Editor context injection (inject current page content to last user message)
       new PageEditorContextInjector({
         enabled: isPageEditorEnabled,
         // Use direct pageContentContext if provided (server-side), otherwise build from initialContext + stepContext (frontend)
-        pageContentContext: pageContentContext
-          ? pageContentContext
-          : initialContext?.pageEditor
+        pageContentContext:
+          pageContentContext ??
+          (initialContext?.pageEditor
             ? {
                 markdown: initialContext.pageEditor.markdown,
                 metadata: {
@@ -289,10 +296,10 @@ export class MessagesEngine {
                 // Use latest XML from stepContext if available, otherwise fallback to initial XML
                 xml: stepContext?.stepPageEditor?.xml || initialContext.pageEditor.xml,
               }
-            : undefined,
+            : undefined),
       }),
 
-      // 16. GTD Todo injection (conditionally added, at end of last user message)
+      // 17. GTD Todo injection (conditionally added, at end of last user message)
       ...(isGTDTodoEnabled ? [new GTDTodoInjector({ enabled: true, todos: gtd.todos })] : []),
 
       // =============================================

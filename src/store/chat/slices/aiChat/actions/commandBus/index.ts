@@ -6,7 +6,11 @@ import { parseCommandsFromEditorData } from './parseCommands';
 import type { CommandHandlerContext, CommandRegistry, CommandSendOverrides } from './types';
 
 export { injectReferTopicNode } from './editorDataHelpers';
-export { hasNonActionContent, parseCommandsFromEditorData } from './parseCommands';
+export {
+  hasNonActionContent,
+  parseCommandsFromEditorData,
+  parseSelectedSkillsFromEditorData,
+} from './parseCommands';
 export type { CommandSendOverrides } from './types';
 
 const COMMAND_REGISTRY: CommandRegistry = {

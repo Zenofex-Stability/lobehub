@@ -5,6 +5,7 @@ import { aiChatService } from '@/services/aiChat';
 import { chatService } from '@/services/chat';
 import { messageService } from '@/services/message';
 import * as agentGroupStore from '@/store/agentGroup';
+import * as toolStoreModule from '@/store/tool';
 import { messageMapKey } from '@/store/chat/utils/messageMapKey';
 import { getSessionStoreState } from '@/store/session';
 
@@ -236,6 +237,131 @@ describe('ConversationLifecycle actions', () => {
         });
 
         expect(result.current.internal_execAgentRuntime).toHaveBeenCalled();
+      });
+
+      it('should persist selected slash skills as preload messages before sending', async () => {
+        const { result } = renderHook(() => useChatStore());
+
+        const sendMessageInServerSpy = vi.spyOn(aiChatService, 'sendMessageInServer').mockResolvedValue({
+          messages: [
+            createMockMessage({ id: TEST_IDS.USER_MESSAGE_ID, role: 'user' }),
+            createMockMessage({ id: TEST_IDS.ASSISTANT_MESSAGE_ID, role: 'assistant' }),
+          ],
+          topics: [],
+          assistantMessageId: TEST_IDS.ASSISTANT_MESSAGE_ID,
+          userMessageId: TEST_IDS.USER_MESSAGE_ID,
+        } as any);
+        vi.spyOn(toolStoreModule, 'getToolStoreState').mockReturnValue({
+          agentSkillDetailMap: {},
+          agentSkills: [],
+          builtinSkills: [
+            {
+              content: 'Use the user memory skill content.',
+              description: 'Load user memory',
+              identifier: 'user_memory',
+              name: 'User Memory',
+              source: 'builtin',
+            },
+            {
+              content: 'Use the instruction skill content.',
+              description: 'Load instruction',
+              identifier: 'instruction',
+              name: 'Instruction',
+              source: 'builtin',
+            },
+          ],
+        } as any);
+
+        await act(async () => {
+          await result.current.sendMessage({
+            context: createTestContext(),
+            editorData: {
+              root: {
+                children: [
+                  {
+                    children: [
+                      {
+                        actionCategory: 'skill',
+                        actionLabel: 'User Memory',
+                        actionType: 'user_memory',
+                        type: 'action-tag',
+                      },
+                      {
+                        actionCategory: 'skill',
+                        actionLabel: 'Instruction',
+                        actionType: 'instruction',
+                        type: 'action-tag',
+                      },
+                    ],
+                    type: 'paragraph',
+                  },
+                ],
+                type: 'root',
+              },
+            } as any,
+            message: '<action type="user_memory" category="skill" /> ' + TEST_CONTENT.USER_MESSAGE,
+          });
+        });
+
+        expect(sendMessageInServerSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            newUserMessage: expect.objectContaining({
+              content: '<action type="user_memory" category="skill" /> ' + TEST_CONTENT.USER_MESSAGE,
+              editorData: expect.objectContaining({
+                root: expect.any(Object),
+              }),
+            }),
+            preloadMessages: [
+              expect.objectContaining({
+                content: '',
+                role: 'assistant',
+                tools: [
+                  expect.objectContaining({
+                    apiName: 'runSkill',
+                    arguments: JSON.stringify({ name: 'User Memory' }),
+                    identifier: 'lobe-skills',
+                  }),
+                ],
+              }),
+              expect.objectContaining({
+                content: 'Use the user memory skill content.',
+                role: 'tool',
+              }),
+              expect.objectContaining({
+                content: '',
+                role: 'assistant',
+                tools: [
+                  expect.objectContaining({
+                    apiName: 'runSkill',
+                    arguments: JSON.stringify({ name: 'Instruction' }),
+                    identifier: 'lobe-skills',
+                  }),
+                ],
+              }),
+              expect.objectContaining({
+                content: 'Use the instruction skill content.',
+                role: 'tool',
+              }),
+            ],
+          }),
+          expect.any(AbortController),
+        );
+        expect(
+          sendMessageInServerSpy.mock.calls[0]?.[0].newUserMessage.editorData?.root.children[0].children,
+        ).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              actionCategory: 'skill',
+              actionType: 'user_memory',
+              type: 'action-tag',
+            }),
+          ]),
+        );
+        expect(result.current.internal_execAgentRuntime).toHaveBeenCalledWith(
+          expect.not.objectContaining({
+            initialContext: expect.anything(),
+          }),
+        );
       });
 
       it('should work when sending from home page (activeAgentId is empty but context.agentId exists)', async () => {

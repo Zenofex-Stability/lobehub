@@ -1,6 +1,9 @@
 import { z } from 'zod';
 
+import type { MessageMetadata } from './message/common';
+import { ChatToolPayloadSchema, MessageMetadataSchema } from './message/common';
 import type { UIChatMessage } from './message';
+import type { CreateMessageParams } from './message/ui/params';
 import type { PageSelection } from './message/ui/params';
 import { PageSelectionSchema } from './message/ui/params';
 import type { OpenAIChatMessage } from './openai/chat';
@@ -19,6 +22,15 @@ export interface SendNewMessage {
   /** Page selections attached to this message (for Ask AI functionality) */
   pageSelections?: PageSelection[];
   parentId?: string;
+}
+
+export interface SendPreloadMessage
+  extends Omit<
+    Pick<CreateMessageParams, 'content' | 'metadata' | 'plugin' | 'tool_call_id' | 'tools'>,
+    'metadata'
+  > {
+  metadata?: MessageMetadata;
+  role: 'assistant' | 'tool';
 }
 
 /**
@@ -59,6 +71,7 @@ export interface SendMessageServerParams {
     title?: string;
     topicMessageIds?: string[];
   };
+  preloadMessages?: SendPreloadMessage[];
   newUserMessage: SendNewMessage;
   sessionId?: string;
   threadId?: string;
@@ -71,6 +84,22 @@ export const CreateThreadWithMessageSchema = z.object({
   sourceMessageId: z.string().optional(),
   title: z.string().optional(),
   type: z.enum([ThreadType.Continuation, ThreadType.Standalone, ThreadType.Isolation]),
+});
+
+const SendPreloadMessageSchema = z.object({
+  content: z.string(),
+  metadata: MessageMetadataSchema.optional(),
+  plugin: z
+    .object({
+      apiName: z.string(),
+      arguments: z.string(),
+      identifier: z.string(),
+      type: z.string(),
+    })
+    .optional(),
+  role: z.enum(['assistant', 'tool']),
+  tool_call_id: z.string().optional(),
+  tools: z.array(ChatToolPayloadSchema).optional(),
 });
 
 export const AiSendMessageServerSchema = z.object({
@@ -88,6 +117,7 @@ export const AiSendMessageServerSchema = z.object({
       topicMessageIds: z.array(z.string()).optional(),
     })
     .optional(),
+  preloadMessages: z.array(SendPreloadMessageSchema).optional(),
   newUserMessage: z.object({
     content: z.string(),
     editorData: z.record(z.unknown()).optional(),
