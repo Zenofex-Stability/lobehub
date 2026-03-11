@@ -637,13 +637,6 @@
       "when": 1773115333051,
       "tag": "0090_enable_pg_search",
       "breakpoints": true
-    },
-    {
-      "idx": 91,
-      "version": "7",
-      "when": 1773135223323,
-      "tag": "0091_add_bm25_indexes",
-      "breakpoints": true
     }
   ],
   "version": "6"
