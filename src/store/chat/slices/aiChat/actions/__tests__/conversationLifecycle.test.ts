@@ -2,6 +2,8 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { aiChatService } from '@/services/aiChat';
+import { chatService } from '@/services/chat';
+import { messageService } from '@/services/message';
 import * as agentGroupStore from '@/store/agentGroup';
 import { messageMapKey } from '@/store/chat/utils/messageMapKey';
 import { getSessionStoreState } from '@/store/session';
@@ -96,6 +98,104 @@ describe('ConversationLifecycle actions', () => {
     });
 
     describe('message creation', () => {
+      it('should render pending compressedGroup immediately for /compact', async () => {
+        const { result } = renderHook(() => useChatStore());
+        const topicId = TEST_IDS.TOPIC_ID;
+        const agentId = TEST_IDS.SESSION_ID;
+        const key = messageMapKey({ agentId, topicId });
+        const existingMessages = [
+          createMockMessage({ id: 'user-1', role: 'user', topicId }),
+          createMockMessage({ id: 'assistant-1', role: 'assistant', topicId }),
+        ];
+
+        await act(async () => {
+          useChatStore.setState({
+            activeAgentId: agentId,
+            activeTopicId: topicId,
+            dbMessagesMap: { [key]: existingMessages },
+            messagesMap: { [key]: existingMessages },
+          });
+        });
+
+        const createCompressionGroupSpy = vi
+          .spyOn(messageService, 'createCompressionGroup')
+          .mockResolvedValue({
+            messageGroupId: 'group-1',
+            messages: [
+              {
+                id: 'group-1',
+                content: '...',
+                role: 'compressedGroup',
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+              } as any,
+            ],
+            messagesToSummarize: existingMessages,
+          });
+        vi.spyOn(chatService, 'fetchPresetTaskResult').mockResolvedValue(undefined);
+        vi.spyOn(messageService, 'finalizeCompression').mockResolvedValue({
+          messages: [
+            {
+              id: 'group-1',
+              content: 'summary',
+              role: 'compressedGroup',
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            } as any,
+          ],
+        });
+
+        const optimisticCreateTmpMessageSpy = vi.spyOn(
+          result.current,
+          'optimisticCreateTmpMessage',
+        );
+        const internalDispatchMessageSpy = vi.spyOn(result.current, 'internal_dispatchMessage');
+
+        await act(async () => {
+          await result.current.sendMessage({
+            context: { agentId, topicId, threadId: null },
+            editorData: {
+              root: {
+                children: [
+                  {
+                    children: [
+                      {
+                        actionCategory: 'command',
+                        actionLabel: 'Compact context',
+                        actionType: 'compact',
+                        type: 'action-tag',
+                      },
+                    ],
+                    type: 'paragraph',
+                  },
+                ],
+                type: 'root',
+              },
+            } as any,
+            message: '',
+          });
+        });
+
+        expect(optimisticCreateTmpMessageSpy).not.toHaveBeenCalled();
+        expect(internalDispatchMessageSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: expect.stringMatching(/^tmp_compress_/),
+            type: 'createMessage',
+            value: expect.objectContaining({
+              compressedMessages: [],
+              content: '...',
+              role: 'compressedGroup',
+            }),
+          }),
+          expect.any(Object),
+        );
+        expect(createCompressionGroupSpy).toHaveBeenCalledWith({
+          agentId,
+          messageIds: ['user-1', 'assistant-1'],
+          topicId,
+        });
+      });
+
       it('should not process AI when onlyAddUserMessage is true', async () => {
         const { result } = renderHook(() => useChatStore());
 

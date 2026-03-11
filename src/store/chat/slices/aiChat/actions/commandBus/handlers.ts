@@ -13,5 +13,5 @@ export const newTopicHandler: CommandHandler = () => {
  * Triggers a history summarization instead of normal AI response.
  */
 export const compactHandler: CommandHandler = () => {
-  return { skipAISend: true, triggerCompression: true };
+  return { triggerCompression: true };
 };

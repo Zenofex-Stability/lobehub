@@ -13,6 +13,7 @@ import { Editor } from '@lobehub/editor/react';
 import { memo, useMemo } from 'react';
 
 import { ReactActionTagPlugin } from '@/features/ChatInput/InputEditor/ActionTag';
+import { ReactReferTopicPlugin } from '@/features/ChatInput/InputEditor/ReferTopic';
 
 interface RichTextMessageProps {
   editorState: unknown;
@@ -29,6 +30,7 @@ const EDITOR_PLUGINS = [
   ReactMathPlugin,
   ReactMentionPlugin,
   ReactActionTagPlugin,
+  ReactReferTopicPlugin,
 ];
 
 const RichTextMessage = memo<RichTextMessageProps>(({ editorState }) => {

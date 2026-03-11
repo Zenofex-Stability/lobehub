@@ -5,6 +5,8 @@ import { ArchiveIcon, MessageSquarePlusIcon, WrenchIcon } from 'lucide-react';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useChatStore } from '@/store/chat';
+
 import { useChatInputStore } from '../../store';
 import { INSERT_ACTION_TAG_COMMAND, type InsertActionTagPayload } from './command';
 import { type ActionTagData, BUILTIN_COMMANDS } from './types';
@@ -28,6 +30,7 @@ const COMMAND_ICONS: Record<string, any> = {
 export const useSlashActionItems = (): SlashOptions['items'] => {
   const { t } = useTranslation('editor');
   const editorInstance = useChatInputStore((s) => s.editor);
+  const activeTopicId = useChatStore((s) => s.activeTopicId);
   const enabledSkills = useEnabledSkills();
 
   return useCallback(
@@ -88,8 +91,9 @@ export const useSlashActionItems = (): SlashOptions['items'] => {
 
       if (!isAtLineStart) return [];
 
-      // 1. Built-in commands
+      // 1. Built-in commands (filter newTopic when no active topic)
       for (const action of BUILTIN_COMMANDS) {
+        if (action.type === 'newTopic' && !activeTopicId) continue;
         allItems.push(makeCommandItem(action) as SlashItem);
       }
 
@@ -110,6 +114,6 @@ export const useSlashActionItems = (): SlashOptions['items'] => {
 
       return allItems;
     },
-    [t, editorInstance, enabledSkills],
+    [t, editorInstance, activeTopicId, enabledSkills],
   );
 };

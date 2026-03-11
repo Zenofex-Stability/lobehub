@@ -3,6 +3,7 @@ import { produce } from 'immer';
 import { type StateCreator } from 'zustand';
 
 import { messageService } from '@/services/message';
+import { useChatStore } from '@/store/chat';
 
 import { type Store as ConversationStore } from '../../../action';
 import { dataSelectors } from '../../data/selectors';
@@ -61,6 +62,10 @@ export const messageStateSlice: StateCreator<
 
     const { context, replaceMessages } = get();
     if (!context.agentId || !context.topicId) return;
+
+    useChatStore
+      .getState()
+      .cancelOperations({ messageId: id, status: 'running' }, 'Compression cancelled');
 
     // Call service to cancel compression
     const { messages } = await messageService.cancelCompression({

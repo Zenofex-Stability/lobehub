@@ -23,6 +23,30 @@ export const parseCommandsFromEditorData = (
   return commands;
 };
 
+/**
+ * Check if editorData contains any meaningful text content
+ * besides action-tag nodes (whitespace-only counts as empty).
+ */
+export const hasNonActionContent = (editorData: Record<string, any> | undefined): boolean => {
+  if (!editorData) return false;
+  const parts: string[] = [];
+  collectText(editorData.root, parts);
+  return parts.join('').trim().length > 0;
+};
+
+function collectText(node: any, out: string[]): void {
+  if (!node) return;
+  if (node.type === 'action-tag') return;
+  if (node.type === 'text' && typeof node.text === 'string') {
+    out.push(node.text);
+  }
+  if (Array.isArray(node.children)) {
+    for (const child of node.children) {
+      collectText(child, out);
+    }
+  }
+}
+
 function walkNode(node: any, out: ParsedCommand[]): void {
   if (!node) return;
 

@@ -22,6 +22,11 @@ import { getAgentStoreState } from '@/store/agent';
 import { agentSelectors } from '@/store/agent/selectors';
 import { agentGroupByIdSelectors, getChatGroupStoreState } from '@/store/agentGroup';
 import { type ChatStore } from '@/store/chat/store';
+import {
+  createPendingCompressedGroup,
+  getCompressionCandidateMessageIds,
+  hasRunningCompressionOperation,
+} from '@/store/chat/utils/compression';
 import { getFileStoreState } from '@/store/file/store';
 import { useGlobalStore } from '@/store/global';
 import { systemStatusSelectors } from '@/store/global/selectors';
@@ -30,7 +35,12 @@ import { useUserMemoryStore } from '@/store/userMemory';
 
 import { dbMessageSelectors, displayMessageSelectors, topicSelectors } from '../../../selectors';
 import { messageMapKey } from '../../../utils/messageMapKey';
-import { type CommandSendOverrides, processCommands } from './commandBus';
+import {
+  type CommandSendOverrides,
+  hasNonActionContent,
+  injectReferTopicNode,
+  processCommands,
+} from './commandBus';
 
 /**
  * Extended params for sendMessage with context
@@ -64,6 +74,16 @@ type Setter = StoreSetter<ChatStore>;
 export const conversationLifecycle = (set: Setter, get: () => ChatStore, _api?: unknown) =>
   new ConversationLifecycleActionImpl(set, get, _api);
 
+const isAbortError = (error: unknown, abortController?: AbortController) =>
+  !!abortController?.signal.aborted ||
+  (error instanceof Error &&
+    (error.name === 'AbortError' ||
+      error.message.includes('aborted') ||
+      error.message.includes('cancelled')));
+
+const createAbortError = () =>
+  Object.assign(new Error('Compression cancelled'), { name: 'AbortError' });
+
 export class ConversationLifecycleActionImpl {
   readonly #get: () => ChatStore;
 
@@ -75,7 +95,7 @@ export class ConversationLifecycleActionImpl {
 
   sendMessage = async ({
     message,
-    editorData,
+    editorData: inputEditorData,
     files,
     onlyAddUserMessage,
     context,
@@ -83,6 +103,7 @@ export class ConversationLifecycleActionImpl {
     parentId: inputParentId,
     pageSelections,
   }: SendMessageWithContextParams): Promise<SendMessageResult | undefined> => {
+    let editorData = inputEditorData;
     const { internal_execAgentRuntime, mainInputEditor } = this.#get();
 
     // Use context from params (required)
@@ -113,8 +134,37 @@ export class ConversationLifecycleActionImpl {
       pageSelections,
     });
 
+    // /compact — directly compress context without sending any message
+    if (commandOverrides.triggerCompression) {
+      const compressContext = { ...context };
+      if (
+        compressContext.topicId &&
+        !hasRunningCompressionOperation(Object.values(this.#get().operations), compressContext)
+      ) {
+        await this.#executeCompression(compressContext, '');
+      }
+      return;
+    }
+
     // /newTopic — force a fresh topic regardless of current context
+    let forceNewTopicFromExisting = false;
     if (commandOverrides.forceNewTopic) {
+      // If no message content besides the action tag, just navigate to a new topic without sending
+      if (!hasNonActionContent(editorData)) {
+        await this.#get().switchTopic(null);
+        return;
+      }
+
+      if (context.topicId) {
+        const originalTopic = topicSelectors.getTopicById(context.topicId)(this.#get());
+        const topicTitle = originalTopic?.title || '';
+        // Inject referTopic into content for LLM context
+        const referTag = `<referTopic name="${topicTitle}" id="${context.topicId}" />`;
+        message = `${referTag}\n${message}`;
+        // Inject refer-topic node into editorData for rich text display
+        editorData = injectReferTopicNode(editorData, context.topicId, topicTitle);
+        forceNewTopicFromExisting = true;
+      }
       context = { ...context, topicId: undefined };
     }
 
@@ -145,9 +195,11 @@ export class ConversationLifecycleActionImpl {
     }
 
     // Use provided messages or query from store
+    // For /newTopic from existing topic, start with empty message list (fresh topic)
     const contextKey = messageMapKey(context);
-    const messages =
-      inputMessages ?? displayMessageSelectors.getDisplayMessagesByKey(contextKey)(this.#get());
+    const messages = forceNewTopicFromExisting
+      ? []
+      : (inputMessages ?? displayMessageSelectors.getDisplayMessagesByKey(contextKey)(this.#get()));
     const lastMessage = messages.at(-1);
 
     useUserMemoryStore.getState().setActiveMemoryContext({
@@ -158,7 +210,7 @@ export class ConversationLifecycleActionImpl {
     });
 
     // Use provided parentId or calculate from messages
-    let parentId: string | undefined = inputParentId;
+    let parentId: string | undefined = forceNewTopicFromExisting ? undefined : inputParentId;
     if (!parentId && lastMessage) {
       parentId = displayMessageSelectors.findLastMessageId(lastMessage.id)(this.#get());
     }
@@ -264,7 +316,7 @@ export class ConversationLifecycleActionImpl {
             : undefined,
           newTopic: !topicId
             ? {
-                topicMessageIds: messages.map((m) => m.id),
+                topicMessageIds: forceNewTopicFromExisting ? [] : messages.map((m) => m.id),
                 title: message.slice(0, 20) || t('defaultTitle', { ns: 'topic' }),
               }
             : undefined,
@@ -399,17 +451,8 @@ export class ConversationLifecycleActionImpl {
     // execAgentRuntime is a separate operation (child) that handles AI response generation
     this.#get().completeOperation(operationId);
 
-    // ── Command-driven execution ──
-    if (commandOverrides.triggerCompression) {
-      // /compact: trigger context compression instead of AI response
-      const compressContext = {
-        ...operationContext,
-        topicId: data.topicId ?? operationContext.topicId,
-        threadId: data.createdThreadId ?? operationContext.threadId,
-      };
-      await this.#executeCompression(compressContext, operationId);
-    } else if (!commandOverrides.skipAISend) {
-      // Normal AI execution
+    // ── AI execution ──
+    {
       const execContext = {
         ...operationContext,
         topicId: data.topicId ?? operationContext.topicId,
@@ -507,28 +550,46 @@ export class ConversationLifecycleActionImpl {
     if (!topicId) return;
 
     const contextKey = messageMapKey(context as any);
-    const dbMessages =
-      displayMessageSelectors.getDisplayMessagesByKey(contextKey)(this.#get()) || [];
-    const messageIds = dbMessages.map((m) => m.id).filter(Boolean);
+    const dbMessages = dbMessageSelectors.getDbMessagesByKey(contextKey)(this.#get()) || [];
+    const messageIds = getCompressionCandidateMessageIds(dbMessages);
 
     if (messageIds.length === 0) return;
 
-    const { operationId } = this.#get().startOperation({
-      context: { ...context, messageId: undefined },
+    const tempId = 'tmp_compress_' + nanoid();
+    const { abortController, operationId } = this.#get().startOperation({
+      context: { ...context, messageId: tempId },
       parentOperationId,
       type: 'contextCompression',
     });
 
+    // Immediate UI feedback: render a pending compressed group from the first frame
+    this.#get().internal_dispatchMessage(
+      {
+        id: tempId,
+        type: 'createMessage',
+        value: createPendingCompressedGroup({
+          agentId,
+          groupId: context.groupId,
+          id: tempId,
+          threadId: context.threadId,
+          topicId,
+        }) as any,
+      },
+      { operationId },
+    );
+
     try {
-      // 1. Create compression group
+      // 1. Create compression group on server
       const result = await messageService.createCompressionGroup({
         agentId,
         messageIds,
         topicId,
       });
-      const { messageGroupId, messages: initialMessages, messagesToSummarize } = result;
+      const { messageGroupId, messages: serverMessages, messagesToSummarize } = result;
 
-      this.#get().replaceMessages(initialMessages, { context: context as any });
+      // Replace local pending group with server compression group
+      this.#get().replaceMessages(serverMessages, { context: context as any });
+      this.#get().associateMessageWithOperation(messageGroupId, operationId);
 
       // 2. Generate summary via LLM
       const { model, provider } = agentSelectors.getAgentConfigById(agentId)(getAgentStoreState());
@@ -536,6 +597,7 @@ export class ConversationLifecycleActionImpl {
       let summaryContent = '';
 
       await chatService.fetchPresetTaskResult({
+        abortController,
         onMessageHandle: (chunk) => {
           if (chunk.type === 'text') {
             summaryContent += chunk.text || '';
@@ -547,6 +609,8 @@ export class ConversationLifecycleActionImpl {
         },
         params: { ...compressionPayload, model, provider },
       });
+
+      if (abortController.signal.aborted) throw createAbortError();
 
       // 3. Finalize compression
       const finalResult = await messageService.finalizeCompression({
@@ -562,7 +626,19 @@ export class ConversationLifecycleActionImpl {
 
       this.#get().completeOperation(operationId);
     } catch (error) {
+      if (isAbortError(error, abortController)) {
+        this.#get().internal_dispatchMessage(
+          { type: 'deleteMessages', ids: [tempId] },
+          { operationId },
+        );
+        return;
+      }
+
       console.error('[/compact] Compression failed:', error);
+      this.#get().internal_dispatchMessage(
+        { type: 'deleteMessages', ids: [tempId] },
+        { operationId },
+      );
       this.#get().failOperation(operationId, {
         message: error instanceof Error ? error.message : String(error),
         type: 'compression_failed',

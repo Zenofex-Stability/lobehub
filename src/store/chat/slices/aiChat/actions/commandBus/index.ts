@@ -5,7 +5,8 @@ import { compactHandler, newTopicHandler } from './handlers';
 import { parseCommandsFromEditorData } from './parseCommands';
 import type { CommandHandlerContext, CommandRegistry, CommandSendOverrides } from './types';
 
-export { parseCommandsFromEditorData } from './parseCommands';
+export { injectReferTopicNode } from './editorDataHelpers';
+export { hasNonActionContent, parseCommandsFromEditorData } from './parseCommands';
 export type { CommandSendOverrides } from './types';
 
 const COMMAND_REGISTRY: CommandRegistry = {

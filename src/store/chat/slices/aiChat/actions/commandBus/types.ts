@@ -9,9 +9,7 @@ import type { SendMessageWithContextParams } from '../conversationLifecycle';
 export interface CommandSendOverrides {
   /** Force creation of a new topic (ignore current topicId) */
   forceNewTopic?: boolean;
-  /** Whether to skip sending the message to AI entirely */
-  skipAISend?: boolean;
-  /** Trigger context compression after message creation */
+  /** Trigger context compression directly (no message sent) */
   triggerCompression?: boolean;
 }
 

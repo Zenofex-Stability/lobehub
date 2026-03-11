@@ -67,7 +67,7 @@ describe('processCommands', () => {
     expect(result.forceNewTopic).toBe(true);
   });
 
-  it('should return skipAISend and triggerCompression for compact command', () => {
+  it('should return triggerCompression for compact command', () => {
     const params = {
       ...baseParams,
       editorData: {
@@ -91,7 +91,6 @@ describe('processCommands', () => {
     };
 
     const result = processCommands(params);
-    expect(result.skipAISend).toBe(true);
     expect(result.triggerCompression).toBe(true);
   });
 
@@ -126,6 +125,6 @@ describe('processCommands', () => {
 
     const result = processCommands(params);
     expect(result.forceNewTopic).toBe(true);
-    expect(result.skipAISend).toBe(true);
+    expect(result.triggerCompression).toBe(true);
   });
 });
