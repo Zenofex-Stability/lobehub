@@ -309,7 +309,7 @@ export class SearchRepo {
    * Escape special tantivy query syntax characters in user input
    */
   private sanitizeQuery(query: string): string {
-    return query.replace(/[+\-&|!(){}[\]^"~*?:\\/]/g, '\\$&').trim();
+    return query.replaceAll(/[+\-&|!(){}[\]^"~*?:\\/]/g, '\\$&').trim();
   }
 
   /**
@@ -356,7 +356,12 @@ export class SearchRepo {
         updatedAt: agents.updatedAt,
       })
       .from(agents)
-      .where(and(eq(agents.userId, this.userId), sql`${agents.title} @@@ ${bm25Query}`))
+      .where(
+        and(
+          eq(agents.userId, this.userId),
+          sql`(${agents.title} @@@ ${bm25Query} OR ${agents.description} @@@ ${bm25Query} OR ${agents.slug} @@@ ${bm25Query} OR ${agents.tags} @@@ ${bm25Query})`,
+        ),
+      )
       .orderBy(sql`paradedb.score(${agents.id}) DESC`)
       .limit(limit);
 
@@ -398,7 +403,12 @@ export class SearchRepo {
         updatedAt: topics.updatedAt,
       })
       .from(topics)
-      .where(and(eq(topics.userId, this.userId), sql`${topics.title} @@@ ${bm25Query}`))
+      .where(
+        and(
+          eq(topics.userId, this.userId),
+          sql`(${topics.title} @@@ ${bm25Query} OR ${topics.content} @@@ ${bm25Query} OR ${topics.historySummary} @@@ ${bm25Query})`,
+        ),
+      )
       .orderBy(sql`paradedb.score(${topics.id}) DESC`)
       .limit(limit);
 
@@ -552,7 +562,7 @@ export class SearchRepo {
         and(
           eq(documents.userId, this.userId),
           eq(documents.fileType, 'custom/folder'),
-          sql`${documents.title} @@@ ${bm25Query}`,
+          sql`(${documents.title} @@@ ${bm25Query} OR ${documents.filename} @@@ ${bm25Query} OR ${documents.description} @@@ ${bm25Query})`,
         ),
       )
       .orderBy(sql`paradedb.score(${documents.id}) DESC`)
@@ -594,7 +604,7 @@ export class SearchRepo {
         and(
           eq(documents.userId, this.userId),
           eq(documents.fileType, 'custom/document'),
-          sql`${documents.title} @@@ ${bm25Query}`,
+          sql`(${documents.title} @@@ ${bm25Query} OR ${documents.filename} @@@ ${bm25Query})`,
         ),
       )
       .orderBy(sql`paradedb.score(${documents.id}) DESC`)
@@ -632,7 +642,10 @@ export class SearchRepo {
       })
       .from(userMemories)
       .where(
-        and(eq(userMemories.userId, this.userId), sql`${userMemories.title} @@@ ${bm25Query}`),
+        and(
+          eq(userMemories.userId, this.userId),
+          sql`(${userMemories.title} @@@ ${bm25Query} OR ${userMemories.summary} @@@ ${bm25Query} OR ${userMemories.details} @@@ ${bm25Query})`,
+        ),
       )
       .orderBy(sql`paradedb.score(${userMemories.id}) DESC`)
       .limit(limit);
@@ -670,7 +683,10 @@ export class SearchRepo {
       })
       .from(knowledgeBases)
       .where(
-        and(eq(knowledgeBases.userId, this.userId), sql`${knowledgeBases.name} @@@ ${bm25Query}`),
+        and(
+          eq(knowledgeBases.userId, this.userId),
+          sql`(${knowledgeBases.name} @@@ ${bm25Query} OR ${knowledgeBases.description} @@@ ${bm25Query})`,
+        ),
       )
       .orderBy(sql`paradedb.score(${knowledgeBases.id}) DESC`)
       .limit(limit);
