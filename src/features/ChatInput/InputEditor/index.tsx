@@ -10,6 +10,7 @@ import {
   ReactListPlugin,
   ReactMathPlugin,
   ReactVirtualBlockPlugin,
+  type SlashOptions,
 } from '@lobehub/editor';
 import { Editor, FloatMenu, SlashMenu, useEditorState } from '@lobehub/editor/react';
 import { combineKeys } from '@lobehub/ui';
@@ -27,6 +28,8 @@ import { useAgentId } from '../hooks/useAgentId';
 import { useChatInputStore, useStoreApi } from '../store';
 import { ReactActionTagPlugin, useSlashActionItems } from './ActionTag';
 import Placeholder from './Placeholder';
+import { INSERT_REFER_TOPIC_COMMAND, ReactReferTopicPlugin } from './ReferTopic';
+import { useTopicMentionItems } from './useTopicMentionItems';
 
 const className = cx(css`
   p {
@@ -55,7 +58,27 @@ const InputEditor = memo<{ defaultRows?: number }>(({ defaultRows = 2 }) => {
 
   const useCmdEnterToSend = useUserStore(preferenceSelectors.useCmdEnterToSend);
 
-  const enableMention = !!mentionItems && mentionItems.length > 0;
+  const topicMentionItems = useTopicMentionItems();
+
+  const mergedMentionItems = useMemo<SlashOptions['items'] | undefined>(() => {
+    const topicItems = topicMentionItems || [];
+    if (!mentionItems && topicItems.length === 0) return undefined;
+
+    if (typeof mentionItems === 'function') {
+      const fn = mentionItems;
+      return async (search: Parameters<typeof fn>[0]) => {
+        const agentItems = await fn(search);
+        return [...agentItems, ...topicItems];
+      };
+    }
+
+    const agentItems = Array.isArray(mentionItems) ? mentionItems : [];
+    return [...agentItems, ...topicItems];
+  }, [mentionItems, topicMentionItems]);
+
+  const enableMention =
+    !!mergedMentionItems &&
+    (typeof mergedMentionItems === 'function' || mergedMentionItems.length > 0);
 
   // Get agent's model info for vision support check and handle paste upload
   const agentId = useAgentId();
@@ -101,7 +124,7 @@ const InputEditor = memo<{ defaultRows?: number }>(({ defaultRows = 2 }) => {
         ? {
             enablePasteMarkdown: false,
             markdownOption: false,
-            plugins: [ReactActionTagPlugin],
+            plugins: [ReactActionTagPlugin, ReactReferTopicPlugin],
           }
         : {
             plugins: [
@@ -122,6 +145,7 @@ const InputEditor = memo<{ defaultRows?: number }>(({ defaultRows = 2 }) => {
                     ),
               }),
               ReactActionTagPlugin,
+              ReactReferTopicPlugin,
             ],
           },
     [enableRichRender, expand, slashMenuRef],
@@ -142,15 +166,25 @@ const InputEditor = memo<{ defaultRows?: number }>(({ defaultRows = 2 }) => {
       mentionOption={
         enableMention
           ? {
-              items: mentionItems,
+              items: mergedMentionItems,
               markdownWriter: (mention) => {
+                if (mention.metadata?.type === 'topic') {
+                  return `<refer_topic name="${mention.metadata.topicTitle}" id="${mention.metadata.topicId}" />`;
+                }
                 return `<mention name="${mention.label}" id="${mention.metadata.id}" />`;
               },
               onSelect: (editor, option) => {
-                editor.dispatchCommand(INSERT_MENTION_COMMAND, {
-                  label: String(option.label),
-                  metadata: option.metadata,
-                });
+                if (option.metadata?.type === 'topic') {
+                  editor.dispatchCommand(INSERT_REFER_TOPIC_COMMAND, {
+                    topicId: option.metadata.topicId as string,
+                    topicTitle: String(option.label),
+                  });
+                } else {
+                  editor.dispatchCommand(INSERT_MENTION_COMMAND, {
+                    label: String(option.label),
+                    metadata: option.metadata,
+                  });
+                }
               },
               renderComp: expand
                 ? undefined

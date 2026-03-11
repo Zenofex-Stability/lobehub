@@ -1,12 +1,29 @@
+import { $wrapNodeInElement } from '@lexical/utils';
 import {
   type getKernelFromEditor,
   ILitexmlService,
   IMarkdownShortCutService,
 } from '@lobehub/editor';
 import type { IEditorPlugin } from '@lobehub/editor/es/types/kernel';
-import type { LexicalEditor } from 'lexical';
+import {
+  $createParagraphNode,
+  $insertNodes,
+  $isRootOrShadowRoot,
+  COMMAND_PRIORITY_HIGH,
+  createCommand,
+  type LexicalEditor,
+} from 'lexical';
 
-import { $isReferTopicNode, ReferTopicNode, type SerializedReferTopicNode } from './ReferTopicNode';
+import {
+  $createReferTopicNode,
+  $isReferTopicNode,
+  ReferTopicNode,
+  type SerializedReferTopicNode,
+} from './ReferTopicNode';
+
+export const INSERT_REFER_TOPIC_COMMAND = createCommand<{ topicId: string; topicTitle: string }>(
+  'INSERT_REFER_TOPIC_COMMAND',
+);
 
 type IEditorKernel = ReturnType<typeof getKernelFromEditor>;
 
@@ -42,9 +59,10 @@ export class ReferTopicPlugin implements IEditorPlugin<ReferTopicPluginOptions> 
     });
   }
 
-  onInit(_editor: LexicalEditor): void {
+  onInit(editor: LexicalEditor): void {
     this.registerMarkdown();
     this.registerLiteXml();
+    this.registerCommand(editor);
   }
 
   private registerMarkdown(): void {
@@ -52,9 +70,26 @@ export class ReferTopicPlugin implements IEditorPlugin<ReferTopicPluginOptions> 
 
     mdService?.registerMarkdownWriter(ReferTopicNode.getType(), (ctx: any, node: any) => {
       if ($isReferTopicNode(node)) {
-        ctx.appendLine(`<referTopic name="${node.topicTitle}" id="${node.topicId}" />`);
+        ctx.appendLine(`<refer_topic name="${node.topicTitle}" id="${node.topicId}" />`);
       }
     });
+  }
+
+  private registerCommand(editor: LexicalEditor): void {
+    editor.registerCommand(
+      INSERT_REFER_TOPIC_COMMAND,
+      (payload) => {
+        editor.update(() => {
+          const node = $createReferTopicNode(payload.topicId, payload.topicTitle);
+          $insertNodes([node]);
+          if ($isRootOrShadowRoot(node.getParentOrThrow())) {
+            $wrapNodeInElement(node, $createParagraphNode).selectEnd();
+          }
+        });
+        return true;
+      },
+      COMMAND_PRIORITY_HIGH,
+    );
   }
 
   private registerLiteXml(): void {

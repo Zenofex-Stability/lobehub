@@ -164,7 +164,7 @@ export class ConversationLifecycleActionImpl {
         const originalTopic = topicSelectors.getTopicById(context.topicId)(this.#get());
         const topicTitle = originalTopic?.title || '';
         // Inject referTopic into content for LLM context
-        const referTag = `<referTopic name="${topicTitle}" id="${context.topicId}" />`;
+        const referTag = `<refer_topic name="${topicTitle}" id="${context.topicId}" />`;
         message = `${referTag}\n${message}`;
         // Inject refer-topic node into editorData for rich text display
         editorData = injectReferTopicNode(editorData, context.topicId, topicTitle);
